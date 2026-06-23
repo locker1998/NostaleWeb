@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Main</title>
+  <link rel="stylesheet" href="bazaar.css" />
+</head>
+<body class="page-main">
+  <div class="scene scene--main">
+    <div class="skillbar" role="application" aria-label="Skill bar">
+      <div class="skillbar__grid" id="skill-slots" aria-label="Skill slots"></div>
+      <div class="skillbar__side">
+        <button type="button" class="skillbar__page skillbar__page--active" data-page="1">1</button>
+        <button type="button" class="skillbar__page" data-page="2">2</button>
+        <button type="button" class="skillbar__side-btn skillbar__side-btn--switch" id="skillbar-switch" aria-label="Switch hotkeys">
+          <svg class="skillbar__side-icon" viewBox="0 0 14 14" aria-hidden="true">
+            <path fill="currentColor" d="M11 2.5H9V1l3 2.5-3 2.5V4.5A4.5 4.5 0 0 0 3.2 8.5L2 7.7A6 6 0 0 1 11 2.5z" />
+            <path fill="currentColor" d="M3 11.5h2v1.5l-3-2.5 3-2.5V10a4.5 4.5 0 0 0 7.8-4.5l1.2.8A6 6 0 0 1 3 11.5z" />
+          </svg>
+        </button>
+        <button type="button" class="skillbar__side-btn skillbar__side-btn--lock" id="skillbar-lock" aria-label="Lock skill bar">
+          <svg class="skillbar__side-icon skillbar__side-icon--lock" viewBox="0 0 10 12" aria-hidden="true">
+            <g class="skillbar__lock-icon skillbar__lock-icon--open">
+              <path fill="currentColor" d="M2.1 5.4h5.8c.72 0 1.3.58 1.3 1.3v4.2c0 .72-.58 1.3-1.3 1.3H2.1c-.72 0-1.3-.58-1.3-1.3V6.7c0-.72.58-1.3 1.3-1.3z" />
+              <path fill="none" stroke="currentColor" stroke-width="1.15" stroke-linecap="round" d="M3.4 5.4V4.1a1.6 1.6 0 0 1 3.2 0" />
+            </g>
+            <g class="skillbar__lock-icon skillbar__lock-icon--closed">
+              <path fill="currentColor" d="M2.1 5.4h5.8c.72 0 1.3.58 1.3 1.3v4.2c0 .72-.58 1.3-1.3 1.3H2.1c-.72 0-1.3-.58-1.3-1.3V6.7c0-.72.58-1.3 1.3-1.3z" />
+              <path fill="none" stroke="currentColor" stroke-width="1.15" stroke-linecap="round" d="M3.4 5.4V4.1a1.6 1.6 0 0 1 3.2 0V5.4" />
+            </g>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="skill-info-layer" id="skill-info-layer"></div>
+
+    <div class="bazaar-layer" id="bazaar-layer" hidden>
+      <div class="bazaar bazaar--floating" id="bazaar-root" role="dialog" aria-label="NosBazaar">
+        <header class="bazaar__titlebar" id="bazaar-titlebar">
+          <span class="bazaar__title" id="window-title">NosBazaar</span>
+          <button type="button" class="bazaar__close" id="btn-close" aria-label="Close"></button>
+        </header>
+
+        <div class="bazaar__frame">
+          <div class="bazaar__tab-body">
+            <div class="bazaar__tab-panel bazaar__tab-panel--active" data-tab="buy">
+              <section class="bazaar__filters">
+                <span class="bazaar__label bazaar__filters__criteria-label">Search criteria</span>
+
+                <span class="bazaar__label bazaar__filters__label-name">Name</span>
+                <input type="text" id="filter-name" class="bazaar__input bazaar__filters__name" autocomplete="off" />
+                <span class="bazaar__label bazaar__filters__label-level">Level</span>
+                <select id="filter-level" class="bazaar__input bazaar__select bazaar__filters__level"></select>
+
+                <span class="bazaar__label bazaar__filters__label-category">Category</span>
+                <select id="filter-category" class="bazaar__input bazaar__select bazaar__select--green bazaar__filters__category"></select>
+                <span class="bazaar__label bazaar__filters__label-rarity">Rarity Level</span>
+                <select id="filter-rarity" class="bazaar__input bazaar__select bazaar__filters__rarity"></select>
+
+                <select id="filter-dynamic" class="bazaar__input bazaar__select bazaar__filters__dynamic" aria-label="Dynamic filter"></select>
+                <span class="bazaar__label bazaar__filters__label-upgrade">Upgrade Level</span>
+                <select id="filter-upgrade" class="bazaar__input bazaar__select bazaar__filters__upgrade"></select>
+
+                <span class="bazaar__label bazaar__filters__label-sort">Sort by</span>
+                <select id="filter-sort" class="bazaar__input bazaar__select bazaar__select--yellow bazaar__filters__sort"></select>
+
+                <button type="button" class="bazaar__btn bazaar__btn--search" id="search-btn">Search</button>
+              </section>
+
+              <div class="bazaar__listing">
+                <div class="bazaar__list-header">
+                  <table class="bazaar__list-table">
+                    <colgroup>
+                      <col class="col-name" />
+                      <col class="col-amount" />
+                      <col class="col-price" />
+                      <col class="col-time" />
+                      <col class="col-seller" />
+                      <col class="col-buy" />
+                    </colgroup>
+                    <thead>
+                      <tr>
+                        <th class="col-name">Item name</th>
+                        <th class="col-amount">Amount</th>
+                        <th class="col-price">Price per unit</th>
+                        <th class="col-time">Time period</th>
+                        <th class="col-seller">Seller</th>
+                        <th class="col-buy"></th>
+                      </tr>
+                    </thead>
+                  </table>
+                </div>
+
+                <div class="bazaar__list-body">
+                  <table class="bazaar__list-table">
+                    <colgroup>
+                      <col class="col-name" />
+                      <col class="col-amount" />
+                      <col class="col-price" />
+                      <col class="col-time" />
+                      <col class="col-seller" />
+                      <col class="col-buy" />
+                    </colgroup>
+                    <tbody id="item-rows"></tbody>
+                  </table>
+                </div>
+              </div>
+
+              <footer class="bazaar__footer">
+                <div class="bazaar__pager">
+                  <div class="bazaar__pager-left">
+                    <button type="button" class="bazaar__pager-arrow bazaar__pager-arrow--first" data-page="first" title="First" aria-label="First page"></button>
+                    <button type="button" class="bazaar__pager-arrow bazaar__pager-arrow--prev" data-page="prev" title="Previous" aria-label="Previous page"></button>
+                  </div>
+                  <div class="bazaar__pager-pages" id="page-numbers"></div>
+                  <div class="bazaar__pager-right">
+                    <button type="button" class="bazaar__pager-arrow bazaar__pager-arrow--next" data-page="next" title="Next" aria-label="Next page"></button>
+                    <button type="button" class="bazaar__pager-arrow bazaar__pager-arrow--last" data-page="last" title="Last" aria-label="Last page"></button>
+                  </div>
+                  <input type="text" class="bazaar__pager-input" id="page-jump" value="1" />
+                </div>
+
+                <button type="button" class="bazaar__btn bazaar__btn--go" id="page-go" aria-label="Go"></button>
+
+                <div class="bazaar__gold">
+                  <span class="bazaar__gold-prefix" aria-hidden="true">G</span>
+                  <input type="text" class="bazaar__gold-input" id="gold-balance" readonly value="" />
+                </div>
+              </footer>
+            </div>
+
+            <div class="bazaar__tab-panel" data-tab="list">
+              <p class="bazaar__tab-placeholder">List — coming soon</p>
+            </div>
+
+            <div class="bazaar__tab-panel" data-tab="admin">
+              <p class="bazaar__tab-placeholder">Administration — coming soon</p>
+            </div>
+          </div>
+
+          <nav class="bazaar__tabs">
+            <button type="button" class="bazaar__tab bazaar__tab--active" data-tab="buy">Buy</button>
+            <button type="button" class="bazaar__tab" data-tab="list">List</button>
+            <button type="button" class="bazaar__tab" data-tab="admin">Administration</button>
+          </nav>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>

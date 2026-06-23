@@ -1,0 +1,12 @@
+# Generated / local runtime
+data/nosbazaar.db
+cookies.txt
+
+# Python
+__pycache__/
+*.py[cod]
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp

@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Log-in</title>
+  <link rel="stylesheet" href="bazaar.css" />
+</head>
+<body>
+  <div class="scene">
+    <form class="login" id="login-form" role="dialog" aria-label="Log-in">
+      <h1 class="login__title">Log-in</h1>
+
+      <div class="login__row">
+        <span class="login__label">ID</span>
+        <input
+          type="text"
+          id="login-username"
+          class="login__input"
+          autocomplete="username"
+          required
+        />
+      </div>
+
+      <div class="login__row">
+        <span class="login__label">PW</span>
+        <input
+          type="password"
+          id="login-password"
+          class="login__input"
+          autocomplete="current-password"
+          required
+        />
+      </div>
+
+      <p class="login__error" id="login-error" hidden></p>
+
+      <div class="login__actions">
+        <button type="submit" class="bazaar__btn login__btn" id="login-btn">Confirm</button>
+        <button type="button" class="bazaar__btn login__btn" id="login-cancel">Cancel</button>
+      </div>
+    </form>
+  </div>
+
+  <script src="login.js"></script>
+</body>
+</html>
