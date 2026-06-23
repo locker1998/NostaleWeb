@@ -3,10 +3,16 @@
 import hashlib
 import json
 import sqlite3
+import sys
 from datetime import date, timedelta
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+if __name__ == "__main__" and not getattr(sys, "frozen", False):
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from app_paths import app_root
+
+ROOT = app_root()
 DB_PATH = ROOT / "data" / "nosbazaar.db"
 ITEMS_JSON = ROOT / "data" / "items.json"
 FILTERS_JSON = ROOT / "data" / "filters.json"

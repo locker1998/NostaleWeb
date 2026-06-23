@@ -12,7 +12,9 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
-ROOT = Path(__file__).resolve().parent
+from app_paths import app_root
+
+ROOT = app_root()
 DB_PATH = ROOT / "data" / "nosbazaar.db"
 FILTERS_PATH = ROOT / "data" / "filters.json"
 HOST = "127.0.0.1"
@@ -303,7 +305,7 @@ def buy_listing(listing_id: int, buyer_id: int, quantity: int = 1) -> dict:
             )
         else:
             conn.execute("DELETE FROM bazaar WHERE id = ?", (listing_id,))
-            conn.execute("DELETE FROM item_instances WHERE id = ?", (listing["instance_id"],])
+            conn.execute("DELETE FROM item_instances WHERE id = ?", (listing["instance_id"],))
 
         conn.commit()
 
@@ -531,12 +533,17 @@ class BazaarHandler(SimpleHTTPRequestHandler):
             super().log_message(format, *args)
 
 
-def main() -> None:
-    if not DB_PATH.exists():
-        raise SystemExit("Database missing. Run: py db/init_db.py")
+def ensure_ready() -> None:
+    if DB_PATH.exists() and FILTERS_PATH.exists():
+        return
+    print("First run: creating database from seed data...")
+    from db.init_db import main as init_db_main
 
-    if not FILTERS_PATH.exists():
-        raise SystemExit("Filters missing. Run: py db/init_db.py")
+    init_db_main()
+
+
+def main() -> None:
+    ensure_ready()
 
     try:
         server = ThreadingHTTPServer((HOST, PORT), BazaarHandler)

@@ -6,6 +6,12 @@ cookies.txt
 __pycache__/
 *.py[cod]
 
+# PyInstaller
+build/*
+!build/package.py
+dist/
+*.spec
+
 # OS / editor
 .DS_Store
 Thumbs.db
