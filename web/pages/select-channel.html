@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <script src="/static/js/screen-transition-boot.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Channel Selection</title>
+  <link rel="stylesheet" href="/static/css/screen-transition.css" />
+  <link rel="stylesheet" href="/static/css/bazaar.css" />
+  <script src="/static/js/screen-transition.js"></script>
+</head>
+<body class="play">
+  <div class="play-viewport">
+  <div class="scene scene--login scene--server-select">
+    <div class="server-select" role="dialog" aria-label="Server and Channel Selection">
+      <div class="server-select__panels">
+        <section class="server-select__panel" aria-labelledby="server-list-title">
+          <header class="bazaar__titlebar">
+            <span class="bazaar__title" id="server-list-title">Server List</span>
+          </header>
+          <ul class="server-select__list" id="server-list" role="listbox" aria-label="Servers"></ul>
+        </section>
+
+        <section class="server-select__panel" aria-labelledby="channel-list-title">
+          <header class="bazaar__titlebar">
+            <span class="bazaar__title" id="channel-list-title">Channel List</span>
+          </header>
+          <ul class="server-select__list" id="channel-list" role="listbox" aria-label="Channels"></ul>
+        </section>
+      </div>
+    </div>
+
+    <button type="button" class="server-select__leave" id="channel-leave-btn">
+      <span class="server-select__leave-label">Leave</span>
+      <svg class="server-select__leave-icon" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" focusable="false">
+        <path fill="#a0a0a0" d="M9 1h3v12H9V1zm-1 2.5L4.7 6H1v2h3.7L8 10.5V3.5zM7 0v14H13V0H7z"/>
+      </svg>
+    </button>
+
+    <div class="login-info-layer" id="login-info-layer" hidden>
+      <div class="login-info" role="dialog" aria-labelledby="login-info-title">
+        <h2 class="login-info__title" id="login-info-title">Info</h2>
+        <p class="login-info__message" id="login-info-message"></p>
+        <div class="login-info__actions">
+          <button type="button" class="bazaar__btn login-info__btn" id="login-info-primary">Confirm</button>
+          <button type="button" class="bazaar__btn login-info__btn" id="login-info-secondary" hidden>Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <script src="/static/js/ui-sound.js"></script>
+  <script src="/static/js/session-flow.js"></script>
+  <script src="/static/js/select-channel.js"></script>
+</body>
+</html>

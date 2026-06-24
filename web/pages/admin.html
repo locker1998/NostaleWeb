@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="NosTale Web administrator panel." />
+  <title>Admin — NosTale Web</title>
+  <link rel="stylesheet" href="/static/css/landing.css" />
+</head>
+<body>
+  <div class="site">
+    <header class="site-header">
+      <a class="site-logo" href="/">NosTale Web</a>
+      <nav class="site-nav" aria-label="Primary">
+        <a class="site-nav__link" href="/">Home</a>
+        <a class="site-nav__link" href="/play">Play</a>
+        <button type="button" class="site-nav__link site-nav__logout" id="admin-logout-btn">Log out</button>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero__content">
+          <p class="hero__eyebrow">Administrator</p>
+          <h1 class="hero__title">Server control panel</h1>
+          <p class="hero__lead">
+            Manage every channel defined in <code>config/channels.json</code>.
+            Start or stop channels individually, or use the bulk actions below.
+          </p>
+          <div class="hero__actions">
+            <a class="btn btn--ghost" href="/">Back to home</a>
+          </div>
+        </div>
+      </section>
+
+      <section class="server-status" aria-labelledby="admin-channels-title">
+        <div class="server-status__inner">
+          <div class="server-status__header">
+            <h2 id="admin-channels-title" class="server-status__title">Configured Channels</h2>
+            <p class="server-status__updated" id="admin-channel-summary">Loading channels…</p>
+          </div>
+
+          <p class="landing-alert" id="admin-error" hidden role="alert"></p>
+
+          <ul class="server-status__list" id="admin-channel-list" aria-live="polite"></ul>
+        </div>
+      </section>
+
+      <section class="cta-band">
+        <div class="cta-band__inner">
+          <h2 class="cta-band__title">Account management</h2>
+          <p class="cta-band__text">Review registered accounts and characters.</p>
+          <div class="cta-band__actions">
+            <a class="btn btn--primary btn--lg" href="/admin/accounts">View accounts</a>
+            <a class="btn btn--ghost btn--lg" href="/admin/characters">View characters</a>
+          </div>
+        </div>
+      </section>
+
+      <section class="cta-band">
+        <div class="cta-band__inner">
+          <h2 class="cta-band__title">Bulk actions</h2>
+          <p class="cta-band__text">Start every stopped channel or stop every running channel at once.</p>
+          <div class="cta-band__actions">
+            <button type="button" class="btn btn--primary btn--lg" id="admin-start-all">
+              Start all stopped
+            </button>
+            <button type="button" class="btn btn--ghost btn--lg" id="admin-stop-all">
+              Stop all running
+            </button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <p class="site-footer__copy">NosTale Web — fan project. Not affiliated with Entwell Co., Ltd.</p>
+    </footer>
+  </div>
+
+  <script src="/static/js/session-flow.js"></script>
+  <script src="/static/js/admin-common.js"></script>
+  <script src="/static/js/admin.js"></script>
+</body>
+</html>

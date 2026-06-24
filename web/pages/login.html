@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <script src="/static/js/screen-transition-boot.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Log-in</title>
+  <link rel="stylesheet" href="/static/css/screen-transition.css" />
+  <link rel="stylesheet" href="/static/css/bazaar.css" />
+  <script src="/static/js/screen-transition.js"></script>
+</head>
+<body class="play">
+  <div class="play-viewport">
+  <div class="scene scene--login">
+    <form class="login" id="login-form" role="dialog" aria-label="Log-in">
+      <div class="login__field">
+        <label class="login__label" for="login-username">Account name</label>
+        <input
+          type="text"
+          id="login-username"
+          class="login__input"
+          autocomplete="username"
+          required
+        />
+      </div>
+
+      <div class="login__field">
+        <label class="login__label" for="login-password">Password</label>
+        <input
+          type="password"
+          id="login-password"
+          class="login__input"
+          autocomplete="current-password"
+          required
+        />
+      </div>
+
+      <div class="login__actions">
+        <button type="submit" class="bazaar__btn login__btn" id="login-btn">Confirm</button>
+        <button type="button" class="bazaar__btn login__btn" id="login-cancel">Cancel</button>
+      </div>
+    </form>
+
+    <div class="login-info-layer" id="login-info-layer" hidden>
+      <div class="login-info" role="dialog" aria-labelledby="login-info-title">
+        <h2 class="login-info__title" id="login-info-title">Info</h2>
+        <p class="login-info__message" id="login-info-message"></p>
+        <div class="login-info__actions">
+          <button type="button" class="bazaar__btn login-info__btn" id="login-info-primary">Confirm</button>
+          <button type="button" class="bazaar__btn login-info__btn" id="login-info-secondary">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <script src="/static/js/ui-sound.js"></script>
+  <script src="/static/js/session-flow.js"></script>
+  <script src="/static/js/login.js"></script>
+</body>
+</html>

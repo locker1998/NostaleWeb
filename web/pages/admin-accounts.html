@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Accounts — Admin</title>
+  <link rel="stylesheet" href="/static/css/landing.css" />
+</head>
+<body>
+  <div class="site">
+    <header class="site-header">
+      <a class="site-logo" href="/">NosTale Web</a>
+      <nav class="site-nav" aria-label="Primary">
+        <a class="site-nav__link" href="/admin">Admin</a>
+        <a class="site-nav__link" href="/">Home</a>
+        <button type="button" class="site-nav__link site-nav__logout" id="admin-logout-btn">Log out</button>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero__content">
+          <p class="hero__eyebrow">Administrator</p>
+          <h1 class="hero__title">Account listing</h1>
+          <p class="hero__lead">View and soft-delete player accounts.</p>
+          <div class="hero__actions">
+            <a class="btn btn--ghost" href="/admin">Back to admin panel</a>
+          </div>
+        </div>
+      </section>
+
+      <section class="server-status" aria-labelledby="admin-accounts-title">
+        <div class="server-status__inner">
+          <div class="server-status__header">
+            <h2 id="admin-accounts-title" class="server-status__title">Accounts</h2>
+            <p class="server-status__updated" id="admin-accounts-summary">Loading accounts…</p>
+          </div>
+
+          <p class="landing-alert" id="admin-accounts-error" hidden role="alert"></p>
+
+          <ul class="server-status__list admin-record-list" id="admin-accounts-list" aria-live="polite"></ul>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <p class="site-footer__copy">NosTale Web — fan project. Not affiliated with Entwell Co., Ltd.</p>
+    </footer>
+  </div>
+
+  <script src="/static/js/session-flow.js"></script>
+  <script src="/static/js/admin-common.js"></script>
+  <script src="/static/js/admin-accounts.js"></script>
+</body>
+</html>

@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <script src="/static/js/screen-transition-boot.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Create Character</title>
+  <link rel="stylesheet" href="/static/css/screen-transition.css" />
+  <link rel="stylesheet" href="/static/css/bazaar.css" />
+  <script src="/static/js/screen-transition.js"></script>
+</head>
+<body class="play">
+  <div class="play-viewport">
+  <div class="scene scene--create-character" id="create-character-scene">
+    <div class="create-character__layout">
+      <aside class="create-character__left">
+        <div class="create-character__job-info" id="create-character-job-info" aria-live="polite">
+          <h2 class="create-character__job-name" id="create-character-job-name"></h2>
+          <p class="create-character__job-line" id="create-character-job-line-1"></p>
+          <p class="create-character__job-line" id="create-character-job-line-2"></p>
+        </div>
+      </aside>
+
+      <section class="create-character__right" role="dialog" aria-label="Create Character">
+        <p class="create-character__hint" id="create-character-channel-hint" hidden></p>
+
+        <form class="create-character__form" id="create-character-form">
+          <div class="create-character__right-columns">
+            <div class="create-character__right-col create-character__right-col--jobs">
+              <div class="create-character__card create-character__card--job">
+                <span class="create-character__job-heading">Job</span>
+                <div
+                  class="create-character__tiles create-character__tiles--jobs"
+                  id="create-character-jobs"
+                  role="group"
+                  aria-label="Class"
+                ></div>
+              </div>
+            </div>
+
+            <div class="create-character__right-col create-character__right-col--options">
+              <div class="create-character__card create-character__card--side-label">
+                <span class="create-character__card-label">Gender</span>
+                <div class="create-character__card-body">
+                  <div
+                    class="create-character__tiles create-character__tiles--gender"
+                    id="create-character-genders"
+                    role="group"
+                    aria-label="Gender"
+                  ></div>
+                </div>
+              </div>
+
+              <div class="create-character__card create-character__card--side-label" id="create-character-hair-style-card">
+                <span class="create-character__card-label">Hair Style</span>
+                <div class="create-character__card-body">
+                  <div
+                    class="create-character__tiles create-character__tiles--hair"
+                    id="create-character-hair"
+                    role="group"
+                    aria-label="Hair style"
+                  ></div>
+                </div>
+              </div>
+
+              <div class="create-character__card create-character__card--top-label">
+                <span class="create-character__card-header">Hair Colour</span>
+                <div class="create-character__card-body">
+                  <div
+                    class="create-character__hair-colours"
+                    id="create-character-hair-colours"
+                    role="group"
+                    aria-label="Hair colour"
+                  ></div>
+                </div>
+              </div>
+
+              <div class="create-character__card create-character__card--preview" id="create-character-preview">
+                <div class="create-character__preview-stage character-view-stage">
+                  <div class="character-view-box" fr="0">
+                    <div class="character-view-inner">
+                      <img
+                        class="shadowChar"
+                        src="https://nosapki.com/images/nt-images/shadow.png"
+                        alt=""
+                        draggable="false"
+                      />
+                      <img
+                        class="element-character-view scaling costumes"
+                        id="create-character-preview-costumes"
+                        alt=""
+                        draggable="false"
+                      />
+                      <img
+                        class="element-character-view scaling heads"
+                        id="create-character-preview-heads"
+                        alt=""
+                        draggable="false"
+                      />
+                      <img
+                        class="element-character-view scaling hairs"
+                        id="create-character-preview-hairs"
+                        alt=""
+                        draggable="false"
+                        crossorigin="anonymous"
+                      />
+                    </div>
+                  </div>
+                </div>
+                <footer class="create-character__card-footer">
+                  <label class="create-character__footer-label" for="create-character-name">Name</label>
+                  <input
+                    type="text"
+                    id="create-character-name"
+                    class="create-character__input"
+                    maxlength="16"
+                    autocomplete="off"
+                    required
+                  />
+                </footer>
+              </div>
+
+              <p class="create-character__error" id="create-character-error" hidden></p>
+
+              <div class="create-character__actions">
+                <button type="submit" class="create-character__btn create-character__btn--create" id="create-character-submit-btn">Create</button>
+                <button type="button" class="create-character__btn create-character__btn--cancel" id="create-character-cancel-btn">Cancel</button>
+              </div>
+            </div>
+          </div>
+        </form>
+      </section>
+    </div>
+
+    <div class="login-info-layer" id="login-info-layer" hidden>
+      <div class="login-info" role="dialog" aria-labelledby="login-info-title">
+        <h2 class="login-info__title" id="login-info-title">Info</h2>
+        <p class="login-info__message" id="login-info-message"></p>
+        <div class="login-info__actions">
+          <button type="button" class="bazaar__btn login-info__btn" id="login-info-primary">Confirm</button>
+          <button type="button" class="bazaar__btn login-info__btn" id="login-info-secondary">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <script src="/static/js/ui-sound.js"></script>
+  <script src="/static/js/character-view.js"></script>
+  <script src="/static/js/play-dialog.js"></script>
+  <script src="/static/js/session-flow.js"></script>
+  <script src="/static/js/create-character.js"></script>
+</body>
+</html>

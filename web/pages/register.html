@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Create a NosTale Web account and start playing." />
+  <title>Create Account — NosTale Web</title>
+  <link rel="stylesheet" href="/static/css/landing.css" />
+  <link rel="stylesheet" href="/static/css/screen-transition.css" />
+  <script src="/static/js/screen-transition-boot.js"></script>
+  <script src="/static/js/screen-transition.js"></script>
+  <script src="/static/js/session-flow.js"></script>
+</head>
+<body>
+  <div class="site">
+    <header class="site-header">
+      <a class="site-logo" href="/">NosTale Web</a>
+      <nav class="site-nav" aria-label="Primary">
+        <a class="site-nav__link" href="/play/login">Login</a>
+        <a class="site-nav__link site-nav__link--cta" href="/register" aria-current="page">Register</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="auth-section">
+        <div class="auth-card">
+          <p class="auth-card__eyebrow">New player</p>
+          <h1 class="auth-card__title">Create your account</h1>
+          <p class="auth-card__lead">
+            Choose an account name and password. No email required — you can log in and play right away.
+          </p>
+
+          <form class="auth-form" id="register-form" novalidate>
+            <div class="auth-field">
+              <label class="auth-field__label" for="register-username">Account name</label>
+              <input
+                type="text"
+                id="register-username"
+                class="auth-field__input"
+                autocomplete="username"
+                minlength="3"
+                maxlength="16"
+                pattern="[A-Za-z0-9_]+"
+                required
+              />
+              <p class="auth-field__hint">3–16 characters. Letters, numbers, and underscores only.</p>
+            </div>
+
+            <div class="auth-field">
+              <label class="auth-field__label" for="register-password">Password</label>
+              <input
+                type="password"
+                id="register-password"
+                class="auth-field__input"
+                autocomplete="new-password"
+                minlength="4"
+                maxlength="64"
+                required
+              />
+            </div>
+
+            <div class="auth-field">
+              <label class="auth-field__label" for="register-password-confirm">Confirm password</label>
+              <input
+                type="password"
+                id="register-password-confirm"
+                class="auth-field__input"
+                autocomplete="new-password"
+                minlength="4"
+                maxlength="64"
+                required
+              />
+            </div>
+
+            <p class="auth-form__error" id="register-error" hidden role="alert"></p>
+
+            <div class="auth-form__actions">
+              <button type="submit" class="btn btn--primary" id="register-submit">Create Account</button>
+              <a class="btn btn--ghost" href="/play/login">Already have an account?</a>
+            </div>
+          </form>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <p class="site-footer__copy">NosTale Web — fan project. Not affiliated with Entwell Co., Ltd.</p>
+    </footer>
+  </div>
+
+  <script src="/static/js/register.js"></script>
+</body>
+</html>

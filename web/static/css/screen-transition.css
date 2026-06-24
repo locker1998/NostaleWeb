@@ -1,0 +1,23 @@
+html.screen-transition--pending-in,
+html.screen-transition--pending-in body {
+  background-color: #000;
+}
+
+.screen-transition__overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background-color: #000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--screen-fade-ms, 700ms) ease;
+}
+
+.screen-transition__overlay--visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.screen-transition__overlay--instant {
+  transition: none;
+}

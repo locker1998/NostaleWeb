@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <script src="/static/js/screen-transition-boot.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="NosTale Web — play online, explore channels, and trade on the bazaar." />
+  <title>NosTale Web — Online Action MMORPG</title>
+  <link rel="stylesheet" href="/static/css/screen-transition.css" />
+  <link rel="stylesheet" href="/static/css/landing.css" />
+  <script src="/static/js/screen-transition.js"></script>
+</head>
+<body>
+  <div class="site-notice" id="site-notice" hidden role="status"></div>
+  <div class="site">
+    <header class="site-header">
+      <a class="site-logo" href="/">NosTale Web</a>
+      <nav class="site-nav" aria-label="Primary">
+        <a class="site-nav__link" href="/play">Login</a>
+        <a class="site-nav__link site-nav__link--cta" href="/register">Register</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero__content">
+          <p class="hero__eyebrow">Browser-based MMORPG</p>
+          <h1 class="hero__title">Enter a world of adventure, trading, and community.</h1>
+          <p class="hero__lead">
+            Pick your channel, choose your character, and jump into a living online world
+            inspired by classic NosTale — no client download required.
+          </p>
+          <div class="hero__actions">
+            <a class="btn btn--primary" href="/play">Play Now</a>
+            <a class="btn btn--ghost" href="/register">Create Account</a>
+          </div>
+          <dl class="hero__stats">
+            <div class="hero__stat">
+              <dt id="live-channel-count">—</dt>
+              <dd>Live channels</dd>
+            </div>
+            <div class="hero__stat">
+              <dt>3</dt>
+              <dd>Characters per account</dd>
+            </div>
+            <div class="hero__stat">
+              <dt>24/7</dt>
+              <dd>Online bazaar</dd>
+            </div>
+          </dl>
+        </div>
+      </section>
+
+      <section class="server-status" aria-labelledby="server-status-title">
+        <div class="server-status__inner">
+          <div class="server-status__header">
+            <h2 id="server-status-title" class="server-status__title">Server Status</h2>
+            <p class="server-status__updated" id="server-status-updated" hidden></p>
+          </div>
+          <ul class="server-status__list" id="server-status-list" aria-live="polite">
+            <li class="server-status__row server-status__row--loading">Checking server status…</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="highlights" aria-labelledby="highlights-title">
+        <h2 id="highlights-title" class="highlights__title">Why play on NosTale Web?</h2>
+        <div class="highlights__grid">
+          <article class="highlight-card">
+            <h3 class="highlight-card__title">Multi-channel worlds</h3>
+            <p class="highlight-card__text">
+              Select from five dedicated channels and play alongside a bustling community
+              without installing a game client.
+            </p>
+          </article>
+          <article class="highlight-card">
+            <h3 class="highlight-card__title">Player-driven economy</h3>
+            <p class="highlight-card__text">
+              Buy and sell gear on the NosBazaar, manage your gold, and hunt for the best
+              deals across the server.
+            </p>
+          </article>
+          <article class="highlight-card">
+            <h3 class="highlight-card__title">Your characters, your way</h3>
+            <p class="highlight-card__text">
+              Create up to three characters per account, each with their own name, gold,
+              and progress.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section class="cta-band">
+        <div class="cta-band__inner">
+          <h2 class="cta-band__title">Ready to begin?</h2>
+          <p class="cta-band__text">Log in with your account or register to create one.</p>
+          <a class="btn btn--primary btn--lg" href="/play">Play Now</a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <p class="site-footer__copy">NosTale Web — fan project. Not affiliated with Entwell Co., Ltd.</p>
+    </footer>
+  </div>
+
+  <script src="/static/js/session-flow.js"></script>
+  <script src="/static/js/index.js"></script>
+</body>
+</html>

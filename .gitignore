@@ -1,4 +1,6 @@
 # Generated / local runtime
+data/_plain/
+data/data*
 data/nosbazaar.db
 cookies.txt
 
@@ -6,9 +8,8 @@ cookies.txt
 __pycache__/
 *.py[cod]
 
-# PyInstaller
-build/*
-!build/package.py
+# PyInstaller work directory
+build/
 dist/
 *.spec
 

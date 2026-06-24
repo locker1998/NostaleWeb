@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Administrator sign-in for NosTale Web." />
+  <title>Admin Sign In — NosTale Web</title>
+  <link rel="stylesheet" href="/static/css/landing.css" />
+</head>
+<body>
+  <div class="site">
+    <header class="site-header">
+      <a class="site-logo" href="/">NosTale Web</a>
+      <nav class="site-nav" aria-label="Primary">
+        <a class="site-nav__link" href="/">Home</a>
+        <a class="site-nav__link site-nav__link--cta" href="/play">Play</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="auth-section">
+        <div class="auth-card">
+          <p class="auth-card__eyebrow">Administrator</p>
+          <h1 class="auth-card__title">Sign in to the control panel</h1>
+          <p class="auth-card__lead">
+            Use this page to manage channels when game servers are offline or you need
+            server control outside of the normal play flow.
+          </p>
+
+          <form class="auth-form" id="admin-login-form" novalidate>
+            <div class="auth-field">
+              <label class="auth-field__label" for="admin-login-username">Account name</label>
+              <input
+                type="text"
+                id="admin-login-username"
+                class="auth-field__input"
+                autocomplete="username"
+                required
+              />
+            </div>
+
+            <div class="auth-field">
+              <label class="auth-field__label" for="admin-login-password">Password</label>
+              <input
+                type="password"
+                id="admin-login-password"
+                class="auth-field__input"
+                autocomplete="current-password"
+                required
+              />
+            </div>
+
+            <p class="auth-form__error" id="admin-login-error" hidden role="alert"></p>
+
+            <div class="auth-form__actions">
+              <button type="submit" class="btn btn--primary" id="admin-login-submit">Sign In</button>
+              <a class="btn btn--ghost" href="/">Back to home</a>
+            </div>
+          </form>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <p class="site-footer__copy">NosTale Web — fan project. Not affiliated with Entwell Co., Ltd.</p>
+    </footer>
+  </div>
+
+  <script src="/static/js/session-flow.js"></script>
+  <script src="/static/js/admin-login.js"></script>
+</body>
+</html>
