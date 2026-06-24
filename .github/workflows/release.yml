@@ -25,6 +25,9 @@ jobs:
       - name: Install build dependencies
         run: python -m pip install -r scripts/requirements-build.txt
 
+      - name: Prepare release data
+        run: python scripts/prepare_release_data.py
+
       - name: Build release package
         run: python scripts/package.py
 

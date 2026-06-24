@@ -120,10 +120,13 @@ Paste the output into `config/auth.json`. Default dev credentials: `superadmin` 
 
 ```powershell
 py -m pip install -r scripts\requirements-build.txt
+py scripts\prepare_release_data.py
 py scripts/package.py
 ```
 
 Output: `dist/NostaleWeb-windows-x64.zip`
+
+Tracked game assets for CI live under `release_data/_plain/assets/`. The prepare script copies those into `data/_plain/` and downloads `items.json` from itempicker before packaging.
 
 ## CI/CD
 
