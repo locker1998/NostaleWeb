@@ -17,21 +17,10 @@ def copy_runtime_files() -> None:
     shutil.copytree(ROOT / "web", DIST_DIR / "web", dirs_exist_ok=True)
     shutil.copytree(ROOT / "config", DIST_DIR / "config", dirs_exist_ok=True)
 
-    data_dir = DIST_DIR / "data"
-    if data_dir.exists():
-        shutil.rmtree(data_dir)
-    data_dir.mkdir(parents=True)
-
     sys.path.insert(0, str(SCRIPTS))
-    from data_vault import DataVault, resolve_work_plain
+    from data_vault import copy_compiled_vault
 
-    try:
-        plain = resolve_work_plain(ROOT)
-    except FileNotFoundError as exc:
-        raise SystemExit(str(exc)) from exc
-
-    vault = DataVault(data_dir)
-    vault.compile_from_plain(plain)
+    copy_compiled_vault(ROOT / "data", DIST_DIR / "data", exclude_db=True)
 
 
 def main() -> None:

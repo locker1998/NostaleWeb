@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 import tempfile
 from base64 import urlsafe_b64encode
 from pathlib import Path
@@ -149,6 +150,28 @@ class DataVault:
 
         return packed
 
+    def remove_logical(self, logical_name: str) -> bool:
+        if not self.has_toc():
+            return False
+
+        toc = self.load_toc()
+        found = self._entry_for_name(toc, logical_name)
+        if not found:
+            return False
+
+        file_id, _entry = found
+        blob_path = self.data_dir / file_id
+        if blob_path.is_file():
+            blob_path.unlink()
+
+        del toc["entries"][file_id]
+        self.save_toc(toc)
+
+        if logical_name == "nosbazaar.db":
+            self._db_work_path = None
+
+        return True
+
     def db_work_path(self) -> Path:
         if self._db_work_path is None:
             work_dir = Path(tempfile.gettempdir()) / "nostaleweb"
@@ -190,17 +213,45 @@ def resolve_work_plain(root: Path) -> Path:
     return plain
 
 
-def ensure_vault_compiled(vault: DataVault, root: Path) -> None:
+def require_vault(vault: DataVault) -> None:
+    """Require pre-compiled encrypted data files; never auto-build from _plain."""
     if vault.has_toc():
         return
 
-    plain = resolve_work_plain(root)
-    vault.compile_from_plain(plain)
+    data_dir = vault.data_dir
+    raise FileNotFoundError(
+        f"Missing compiled data vault in {data_dir}\n"
+        f"Expected {data_dir / TOC_NAME} plus data001, data002, …\n"
+        "Pull the latest repo (compiled data is committed), or as a developer run:\n"
+        "  py scripts\\compile_data.py"
+    )
+
+
+def ensure_vault_compiled(vault: DataVault, root: Path) -> None:
+    """Backward-compatible alias."""
+    require_vault(vault)
 
 
 def ensure_vault_seed(vault: DataVault, root: Path) -> None:
     """Backward-compatible alias."""
-    ensure_vault_compiled(vault, root)
+    require_vault(vault)
+
+
+def copy_compiled_vault(source_dir: Path, dest_dir: Path, *, exclude_db: bool = False) -> None:
+    """Copy encrypted data000/data001… blobs from source_dir to dest_dir."""
+    source = DataVault(source_dir)
+    require_vault(source)
+
+    if dest_dir.exists():
+        shutil.rmtree(dest_dir)
+    dest_dir.mkdir(parents=True)
+
+    for path in sorted(source_dir.glob("data*")):
+        if path.is_file():
+            shutil.copy2(path, dest_dir / path.name)
+
+    if exclude_db:
+        DataVault(dest_dir).remove_logical("nosbazaar.db")
 
 
 def get_vault(data_dir: Path | None = None) -> DataVault:

@@ -1,6 +1,5 @@
-# Generated / local runtime
+# Local dev sources and runtime database (compiled data/data* is tracked)
 data/_plain/
-data/data*
 data/nosbazaar.db
 cookies.txt
 

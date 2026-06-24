@@ -9,7 +9,7 @@ A NosTale-style bazaar browser demo: static HTML/CSS/JS UI with a small Python A
 3. Extract the folder anywhere on your PC.
 4. Run **NostaleWeb.exe** — your browser opens automatically to the home page at `http://127.0.0.1:8080/`.
 
-On first launch the app creates encrypted runtime files in `data/` (`data000` table of contents plus `data001`, `data002`, …).
+On first launch the app creates a local database in the encrypted `data/` vault.
 
 **Demo login:** register an account at `/register` (no default demo user is created).
 
@@ -23,13 +23,11 @@ Requirements: **Python 3.10+** and `cryptography` (see `scripts/requirements.txt
 git clone git@github.com:locker1998/NostaleWeb.git
 cd NostaleWeb
 py -m pip install -r scripts\requirements.txt
-mkdir data\_plain
-mkdir data\_plain\assets
-REM Add PNG/MP3 files under data\_plain\assets\
-py scripts\compile_data.py
 py scripts\init_db.py
 py scripts\server.py
 ```
+
+Compiled game data (`data/data000`, `data001`, …) is committed to the repo. A fresh clone does not need `data/_plain/`.
 
 Then open http://127.0.0.1:8080/
 
@@ -120,13 +118,12 @@ Paste the output into `config/auth.json`. Default dev credentials: `superadmin` 
 
 ```powershell
 py -m pip install -r scripts\requirements-build.txt
-py scripts\prepare_release_data.py
 py scripts/package.py
 ```
 
 Output: `dist/NostaleWeb-windows-x64.zip`
 
-Tracked game assets for CI live under `release_data/_plain/assets/`. The prepare script copies those into `data/_plain/` and downloads `items.json` from itempicker before packaging.
+The release zip copies the committed compiled `data/` vault as-is (without a bundled database).
 
 ## CI/CD
 
@@ -141,24 +138,24 @@ You can also run the **Release** workflow manually from the Actions tab.
 
 ## Data storage
 
-1. **Edit** assets in `data/_plain/assets/`.
-2. **Compile** into the encrypted vault:
+| Path | Role |
+|------|------|
+| `data/data000` | Encrypted table of contents (tracked in git) |
+| `data001`, `data002`, … | Encrypted payloads: assets, `items.json`, runtime `nosbazaar.db` (tracked except live DB) |
+| `data/_plain/` | **Local dev only** — edit raw assets here, then compile (gitignored) |
+
+**Developers** editing assets:
+
+1. Put files under `data/_plain/` (e.g. `data/_plain/assets/`).
+2. Compile into the encrypted vault:
 
 ```powershell
 py scripts\compile_data.py
 ```
 
-3. **Restart** the server. The game reads from encrypted `data/data000`, `data001`, … — not from `_plain` directly.
+3. Commit the updated `data/data*` files. Restart the server — the game reads from the vault, not `_plain`.
 
-`data/_plain/` is gitignored so raw PNGs/MP3s stay off git.
-
-| Path | Role |
-|------|------|
-| `data/_plain/assets/` | Images, sounds, `bazaar-filters.json`, etc. |
-| `data000` | Encrypted table of contents |
-| `data001`, `data002`, … | Encrypted payloads (`assets/…`, `nosbazaar.db`, …) |
-
-The app decrypts on read. Assets are requested at `/assets/...` and served from the vault.
+**Everyone else** (clone, CI, release zip): use the compiled `data/` files directly. No `_plain` folder is created.
 
 ## Notes
 

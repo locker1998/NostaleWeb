@@ -319,20 +319,27 @@ def fetch_items_json(url: str = ITEMS_JSON_URL, timeout: int = 120) -> list[dict
 
 
 def load_items_json(root: Path, *, url: str = ITEMS_JSON_URL) -> list[dict[str, Any]]:
-    cache_path = root / "data" / "_plain" / "items.json"
+    from data_vault import get_vault
+
+    vault = get_vault(root / "data")
+
+    def load_from_vault() -> list[dict[str, Any]] | None:
+        if not vault.exists("items.json"):
+            return None
+        payload = json.loads(vault.read_text("items.json"))
+        if not isinstance(payload, list):
+            raise ValueError("items.json in data vault must be a JSON array")
+        return payload
 
     try:
-        payload = fetch_items_json(url=url)
+        return fetch_items_json(url=url)
     except (urllib.error.URLError, TimeoutError, ValueError) as exc:
-        if cache_path.is_file():
-            return json.loads(cache_path.read_text(encoding="utf-8"))
+        payload = load_from_vault()
+        if payload is not None:
+            return payload
         raise RuntimeError(
-            f"Could not download items.json ({exc}) and no cache found at {cache_path}"
+            f"Could not download items.json ({exc}) and items.json is not in the data vault"
         ) from exc
-
-    cache_path.parent.mkdir(parents=True, exist_ok=True)
-    cache_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
-    return payload
 
 
 def build_item_rows(items: list[dict[str, Any]]) -> list[tuple[Any, ...]]:
