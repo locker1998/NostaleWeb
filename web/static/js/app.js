@@ -654,7 +654,7 @@ async function loadData() {
     initFromData(await response.json());
   } catch (err) {
     frame.innerHTML =
-      `<div class="bazaar-error">Failed to load from SQLite API: ${err.message}<br>Run <code>py scripts/init_db.py</code> then start <code>NostaleWeb.exe</code></div>`;
+      `<div class="bazaar-error">Failed to load from SQLite API: ${err.message}<br>Close and restart <code>NostaleWeb.exe</code>.</div>`;
   }
 }
 

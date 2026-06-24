@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import shutil
+import sys
 import tempfile
 from base64 import urlsafe_b64encode
 from pathlib import Path
@@ -219,6 +220,12 @@ def require_vault(vault: DataVault) -> None:
         return
 
     data_dir = vault.data_dir
+    if getattr(sys, "frozen", False):
+        raise FileNotFoundError(
+            f"Missing game data in {data_dir}.\n"
+            "Re-extract the full NostaleWeb release zip so data\\data000 exists next to NostaleWeb.exe."
+        )
+
     raise FileNotFoundError(
         f"Missing compiled data vault in {data_dir}\n"
         f"Expected {data_dir / TOC_NAME} plus data001, data002, …\n"

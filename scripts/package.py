@@ -12,10 +12,29 @@ SCRIPTS = ROOT / "scripts"
 DIST_DIR = ROOT / "dist" / "NostaleWeb"
 ZIP_BASE = ROOT / "dist" / "NostaleWeb-windows-x64"
 
+RELEASE_README = """NostaleWeb for Windows (64-bit)
+===============================
+
+No Python installation required.
+
+1. Extract this entire folder somewhere (for example Downloads\\NostaleWeb).
+2. Double-click NostaleWeb.exe.
+3. Your browser opens to http://127.0.0.1:8080/
+4. Keep the console window open while you play.
+
+Important:
+- Keep NostaleWeb.exe together with the _internal, web, config, and data folders.
+- On first run the app creates its own database automatically.
+- Register an account at /register to sign in.
+
+Internet connection is required for item icons.
+"""
+
 
 def copy_runtime_files() -> None:
     shutil.copytree(ROOT / "web", DIST_DIR / "web", dirs_exist_ok=True)
     shutil.copytree(ROOT / "config", DIST_DIR / "config", dirs_exist_ok=True)
+    (DIST_DIR / "README.txt").write_text(RELEASE_README, encoding="utf-8")
 
     sys.path.insert(0, str(SCRIPTS))
     from data_vault import copy_compiled_vault

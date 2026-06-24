@@ -4,9 +4,11 @@ A NosTale-style bazaar browser demo: static HTML/CSS/JS UI with a small Python A
 
 ## Download (recommended)
 
+**No Python installation required.** The release zip includes everything needed to run on Windows.
+
 1. Open [Releases](https://github.com/locker1998/NostaleWeb/releases).
 2. Download **NostaleWeb-windows-x64.zip** from the latest release.
-3. Extract the folder anywhere on your PC.
+3. Extract the **entire** folder anywhere on your PC (keep `NostaleWeb.exe`, `_internal`, `web`, `config`, and `data` together).
 4. Run **NostaleWeb.exe** — your browser opens automatically to the home page at `http://127.0.0.1:8080/`.
 
 On first launch the app creates a local database in the encrypted `data/` vault.

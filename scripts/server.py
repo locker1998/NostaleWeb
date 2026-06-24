@@ -23,7 +23,7 @@ from typing import Any
 from urllib.parse import parse_qs, quote, urlparse
 from urllib.request import Request, urlopen
 
-from app_paths import app_root
+from app_paths import app_root, init_db_hint, server_run_hint
 from auth_config import (
     is_reserved_superadmin_username,
     load_auth_config,
@@ -65,12 +65,6 @@ from routing.router import (
 )
 
 ROOT = app_root()
-
-
-def server_run_hint() -> str:
-    if getattr(sys, "frozen", False):
-        return "NostaleWeb.exe"
-    return "py scripts\\server.py"
 vault = get_vault(ROOT / "data")
 HOST = "127.0.0.1"
 CHANNELS_CONFIG_PATH = ROOT / "config" / "channels.json"
@@ -2687,7 +2681,7 @@ class BazaarHandler(SimpleHTTPRequestHandler):
                 return self._json_response({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
             except sqlite3.Error as exc:
                 return self._json_response(
-                    {"error": f"Database error: {exc}. Run: py scripts/init_db.py"},
+                    {"error": f"Database error: {exc}. {init_db_hint()}"},
                     status=HTTPStatus.INTERNAL_SERVER_ERROR,
                 )
 
@@ -2773,7 +2767,7 @@ class BazaarHandler(SimpleHTTPRequestHandler):
                 return self._json_response({"error": "Invalid JSON"}, status=HTTPStatus.BAD_REQUEST)
             except sqlite3.Error as exc:
                 return self._json_response(
-                    {"error": f"Database error: {exc}. Run: py scripts/init_db.py"},
+                    {"error": f"Database error: {exc}. {init_db_hint()}"},
                     status=HTTPStatus.INTERNAL_SERVER_ERROR,
                 )
 
@@ -2795,7 +2789,7 @@ class BazaarHandler(SimpleHTTPRequestHandler):
                 return self._json_response({"error": "Invalid JSON"}, status=HTTPStatus.BAD_REQUEST)
             except sqlite3.Error as exc:
                 return self._json_response(
-                    {"error": f"Database error: {exc}. Run: py scripts/init_db.py"},
+                    {"error": f"Database error: {exc}. {init_db_hint()}"},
                     status=HTTPStatus.INTERNAL_SERVER_ERROR,
                 )
 
@@ -2820,7 +2814,7 @@ class BazaarHandler(SimpleHTTPRequestHandler):
                 return self._json_response({"error": "Invalid JSON"}, status=HTTPStatus.BAD_REQUEST)
             except sqlite3.Error as exc:
                 return self._json_response(
-                    {"error": f"Database error: {exc}. Run: py scripts/init_db.py"},
+                    {"error": f"Database error: {exc}. {init_db_hint()}"},
                     status=HTTPStatus.INTERNAL_SERVER_ERROR,
                 )
 

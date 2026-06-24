@@ -78,7 +78,7 @@ async function checkServerHealth() {
     const payload = await response.json();
     if (payload.db === false) {
       showInfoDialog(
-        "Error: Database is not ready.\nRun: py scripts\\init_db.py\nThen restart the server.",
+        "Error: Database is not ready.\nClose and restart NostaleWeb.exe.",
       );
     }
   } catch {
