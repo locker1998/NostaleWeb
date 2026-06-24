@@ -36,6 +36,7 @@ function showInfoDialog(message) {
   infoSecondary.hidden = true;
   infoPrimaryHandler = hideInfoDialog;
   infoSecondaryHandler = null;
+  window.bringDialogLayerToFront?.(infoLayer);
   infoLayer.hidden = false;
 }
 
@@ -52,6 +53,7 @@ function showAlertDialog(message, onConfirm) {
     }
   };
   infoSecondaryHandler = null;
+  window.bringDialogLayerToFront?.(infoLayer);
   infoLayer.hidden = false;
 }
 
@@ -74,6 +76,7 @@ function showConfirmDialog(message, onConfirm) {
     }
   };
   infoSecondaryHandler = hideInfoDialog;
+  window.bringDialogLayerToFront?.(infoLayer);
   infoLayer.hidden = false;
 }
 

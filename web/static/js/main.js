@@ -33,7 +33,10 @@ const settingsBtn = document.getElementById("settings-btn");
 const settingsMenu = document.getElementById("settings-menu");
 const settingsServerBtn = document.getElementById("settings-server-btn");
 const settingsQuitBtn = document.getElementById("settings-quit-btn");
+const settingsGameConfigBtn = document.getElementById("settings-game-config-btn");
+const settingsInventoryBtn = document.getElementById("settings-inventory-btn");
 const mainInfoLayer = document.getElementById("main-info-layer");
+const mainInfoTitle = document.getElementById("main-info-title");
 const mainInfoMessage = document.getElementById("main-info-message");
 const mainInfoPrimary = document.getElementById("main-info-primary");
 const mainInfoSecondary = document.getElementById("main-info-secondary");
@@ -54,6 +57,8 @@ let altHotkeys = false;
 let slotsLocked = false;
 let dragState = null;
 let bazaarDragState = null;
+let inventoryDragState = null;
+let gameConfigDragState = null;
 let preferencesReady = false;
 let mainCharacterView = null;
 
@@ -175,6 +180,7 @@ function applyPreferences(prefs) {
 
 function bringInfoWindowToFront(entry) {
   infoLayerEl.appendChild(entry.el);
+  window.NosWindowFocus?.bringToFront?.(entry.el);
 }
 
 function acquireInfoSlot() {
@@ -243,6 +249,36 @@ function makeDraggable(entry) {
 }
 
 function onDragMove(event) {
+  if (gameConfigDragState) {
+    const { root, offsetX, offsetY, sceneLeft, sceneTop, sceneWidth, sceneHeight, windowWidth, windowHeight } =
+      gameConfigDragState;
+
+    let left = event.clientX - sceneLeft - offsetX;
+    let top = event.clientY - sceneTop - offsetY;
+
+    left = Math.max(0, Math.min(left, sceneWidth - windowWidth));
+    top = Math.max(0, Math.min(top, sceneHeight - windowHeight));
+
+    root.style.left = `${left}px`;
+    root.style.top = `${top}px`;
+    return;
+  }
+
+  if (inventoryDragState) {
+    const { root, offsetX, offsetY, sceneLeft, sceneTop, sceneWidth, sceneHeight, windowWidth, windowHeight } =
+      inventoryDragState;
+
+    let left = event.clientX - sceneLeft - offsetX;
+    let top = event.clientY - sceneTop - offsetY;
+
+    left = Math.max(0, Math.min(left, sceneWidth - windowWidth));
+    top = Math.max(0, Math.min(top, sceneHeight - windowHeight));
+
+    root.style.left = `${left}px`;
+    root.style.top = `${top}px`;
+    return;
+  }
+
   if (bazaarDragState) {
     const { root, offsetX, offsetY, sceneLeft, sceneTop, sceneWidth, sceneHeight, windowWidth, windowHeight } =
       bazaarDragState;
@@ -274,6 +310,19 @@ function onDragMove(event) {
 }
 
 function onDragEnd() {
+  if (gameConfigDragState) {
+    gameConfigDragState.root.classList.remove("game-config--dragging");
+    window.GameConfig?.rememberPosition?.();
+    gameConfigDragState = null;
+  }
+  if (inventoryDragState) {
+    const draggedRoot = inventoryDragState.root;
+    draggedRoot.classList.remove("inventory--dragging");
+    if (draggedRoot.id === "inventory-root") {
+      window.NosInventory?.onMainWindowDragEnd?.();
+    }
+    inventoryDragState = null;
+  }
   if (bazaarDragState) {
     bazaarDragState.root.classList.remove("bazaar--dragging");
     bazaarDragState = null;
@@ -282,6 +331,97 @@ function onDragEnd() {
     dragState.entry.el.classList.remove("skill-info--dragging");
     dragState = null;
   }
+}
+
+function initGameConfigDrag() {
+  const root = document.getElementById("game-config-root");
+  const titlebar = document.getElementById("game-config-titlebar");
+  if (!root || !titlebar) return;
+
+  titlebar.addEventListener("mousedown", (event) => {
+    if (event.button !== 0 || event.target.closest(".bazaar__close")) return;
+
+    const rect = root.getBoundingClientRect();
+    const sceneRect = sceneEl.getBoundingClientRect();
+
+    gameConfigDragState = {
+      root,
+      offsetX: event.clientX - rect.left,
+      offsetY: event.clientY - rect.top,
+      sceneLeft: sceneRect.left,
+      sceneTop: sceneRect.top,
+      sceneWidth: sceneRect.width,
+      sceneHeight: sceneRect.height,
+      windowWidth: rect.width,
+      windowHeight: rect.height,
+    };
+
+    root.classList.add("game-config--dragging");
+    window.NosWindowFocus?.bringToFront?.(root);
+    event.preventDefault();
+  });
+}
+
+function initInventoryDrag() {
+  const root = document.getElementById("inventory-root");
+  const titlebar = document.getElementById("inventory-titlebar");
+  if (!root || !titlebar) return;
+
+  titlebar.addEventListener("mousedown", (event) => {
+    if (event.button !== 0 || event.target.closest(".bazaar__close")) return;
+
+    const rect = root.getBoundingClientRect();
+    const sceneRect = sceneEl.getBoundingClientRect();
+
+    inventoryDragState = {
+      root,
+      offsetX: event.clientX - rect.left,
+      offsetY: event.clientY - rect.top,
+      sceneLeft: sceneRect.left,
+      sceneTop: sceneRect.top,
+      sceneWidth: sceneRect.width,
+      sceneHeight: sceneRect.height,
+      windowWidth: rect.width,
+      windowHeight: rect.height,
+    };
+
+    root.classList.add("inventory--dragging");
+    window.NosWindowFocus?.bringToFront?.(root);
+    event.preventDefault();
+  });
+}
+
+function initAdditionalInventoryDrag() {
+  const scene = sceneEl;
+  if (!scene) return;
+
+  document.querySelectorAll(".inventory--additional [data-drag-titlebar]").forEach((titlebar) => {
+    const root = titlebar.closest(".inventory--additional");
+    if (!root) return;
+
+    titlebar.addEventListener("mousedown", (event) => {
+      if (event.button !== 0 || event.target.closest(".bazaar__close")) return;
+
+      const rect = root.getBoundingClientRect();
+      const sceneRect = scene.getBoundingClientRect();
+
+      inventoryDragState = {
+        root,
+        offsetX: event.clientX - rect.left,
+        offsetY: event.clientY - rect.top,
+        sceneLeft: sceneRect.left,
+        sceneTop: sceneRect.top,
+        sceneWidth: sceneRect.width,
+        sceneHeight: sceneRect.height,
+        windowWidth: rect.width,
+        windowHeight: rect.height,
+      };
+
+      root.classList.add("inventory--dragging");
+      window.NosWindowFocus?.bringToFront?.(root);
+      event.preventDefault();
+    });
+  });
 }
 
 function initBazaarDrag() {
@@ -308,6 +448,7 @@ function initBazaarDrag() {
     };
 
     root.classList.add("bazaar--dragging");
+    window.NosWindowFocus?.bringToFront?.(root);
     event.preventDefault();
   });
 }
@@ -317,13 +458,19 @@ function formatInfoGold(value) {
 }
 
 function formatItemClassLine(item) {
+  if (item?.classDisplay) return item.classDisplay;
+  if (window.ItemClasses?.formatItemClassLine) {
+    return window.ItemClasses.formatItemClassLine(item);
+  }
+
   const classes = [];
-  if (item.isSwordsman) classes.push("Swordsman");
-  if (item.isArcher) classes.push("Archer");
-  if (item.isMage) classes.push("Mage");
-  if (item.isMartialArtist) classes.push("Martial Artist");
+  if (item?.isAdventurer) classes.push("ADV");
+  if (item?.isSwordsman) classes.push("WAR");
+  if (item?.isArcher) classes.push("ARC");
+  if (item?.isMage) classes.push("MAG");
+  if (item?.isMartialArtist) classes.push("M.A");
   if (!classes.length) return null;
-  return `${classes.join(", ")} only`;
+  return classes.join("");
 }
 
 function formatItemRequiredLevel(item) {
@@ -485,7 +632,7 @@ function openItemInfo(listing) {
   const item = listing.item || listing;
   openInfoWindow({
     name: item.name || listing.name,
-    icon: listing.icon,
+    icon: listing.icon || window.ItemIcons?.itemIconUrl?.(listing) || "",
     sections: buildItemSections(item),
   });
 }
@@ -721,6 +868,9 @@ function hideMainInfoDialog() {
   if (!mainInfoLayer) return;
 
   mainInfoLayer.hidden = true;
+  if (mainInfoTitle) {
+    mainInfoTitle.hidden = false;
+  }
   mainInfoPrimary.disabled = false;
   mainInfoSecondary.disabled = false;
   mainInfoPrimaryHandler = null;
@@ -734,6 +884,7 @@ function showMainAlertDialog(message, onConfirm) {
   }
 
   closeSettingsMenu();
+  window.bringDialogLayerToFront?.(mainInfoLayer);
   mainInfoMessage.textContent = message;
   mainInfoSecondary.hidden = true;
   mainInfoPrimary.disabled = false;
@@ -750,14 +901,20 @@ function showMainAlertDialog(message, onConfirm) {
   mainInfoLayer.hidden = false;
 }
 
+window.showMainAlertDialog = showMainAlertDialog;
+
 window.showPlayDisconnectDialog = (onConfirm) => {
   showMainAlertDialog("Disconnected from server.", onConfirm);
 };
 
-function showMainInfoDialog(message, { onConfirm, onCancel } = {}) {
+function showMainInfoDialog(message, { onConfirm, onCancel, hideTitle = false } = {}) {
   if (!mainInfoLayer) return;
 
   closeSettingsMenu();
+  window.bringDialogLayerToFront?.(mainInfoLayer);
+  if (mainInfoTitle) {
+    mainInfoTitle.hidden = hideTitle;
+  }
   mainInfoMessage.textContent = message;
   mainInfoSecondary.hidden = false;
   mainInfoPrimary.disabled = false;
@@ -766,6 +923,9 @@ function showMainInfoDialog(message, { onConfirm, onCancel } = {}) {
   mainInfoSecondaryHandler = onCancel || hideMainInfoDialog;
   mainInfoLayer.hidden = false;
 }
+
+window.showMainInfoDialog = showMainInfoDialog;
+window.hideMainInfoDialog = hideMainInfoDialog;
 
 async function logoutToLogin() {
   hideMainInfoDialog();
@@ -821,6 +981,16 @@ settingsQuitBtn?.addEventListener("click", () => {
   });
 });
 
+settingsGameConfigBtn?.addEventListener("click", () => {
+  closeSettingsMenu();
+  window.GameConfig?.open?.();
+});
+
+settingsInventoryBtn?.addEventListener("click", () => {
+  closeSettingsMenu();
+  window.NosInventory?.toggle?.();
+});
+
 mainInfoPrimary?.addEventListener("click", async () => {
   const handler = mainInfoPrimaryHandler;
   if (!handler) {
@@ -843,6 +1013,7 @@ window.addEventListener("resize", () => {
   if (settingsMenu && !settingsMenu.hidden) {
     positionSettingsMenu();
   }
+  window.GameConfig?.reposition?.();
 });
 
 document.addEventListener("keydown", onKeyDown);
@@ -913,6 +1084,10 @@ function initServerClock() {
 function boot() {
   renderSkillSlots();
   initBazaarDrag();
+  initInventoryDrag();
+  initAdditionalInventoryDrag();
+  initGameConfigDrag();
+  window.NosWindowFocus?.init?.();
   initServerClock();
   void loadMain();
 }

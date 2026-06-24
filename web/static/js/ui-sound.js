@@ -15,6 +15,7 @@ const GAME_BUTTON_SELECTOR = [
   ".skillbar__side-btn",
   ".skill-info__close",
   ".settings-btn",
+  ".settings-menu__inventory-btn",
   ".chatbox__tab",
   ".chatbox__scroll-btn",
   ".chatbox__channel-btn",
@@ -24,17 +25,29 @@ const GAME_BUTTON_SELECTOR = [
   ".server-select__item--channel",
   ".server-select__leave",
   ".selection-list__item",
+  ".selection-list__item--empty",
   ".create-character__tile",
   ".create-character__btn",
   "#create-character-submit-btn",
   "#create-character-cancel-btn",
   ".login__btn",
   ".login-info__btn",
+  ".game-config__display-btn",
+  ".game-config__footer-btn",
+  ".game-config__window-mode",
+  ".game-config__mute",
+  ".inventory__tab",
 ].join(", ");
 
 let clickAudio = null;
 let lastPlayedAt = 0;
 let audioUnlocked = false;
+let sfxVolume = 1;
+let sfxMuted = false;
+
+function getEffectiveSfxVolume() {
+  return sfxMuted ? 0 : sfxVolume;
+}
 
 function getClickAudio() {
   if (!clickAudio) {
@@ -66,6 +79,10 @@ function unlockAudio() {
 }
 
 function playClickSound() {
+  if (sfxMuted) {
+    return;
+  }
+
   if (!audioUnlocked) {
     unlockAudio();
   }
@@ -77,8 +94,18 @@ function playClickSound() {
   lastPlayedAt = now;
 
   const audio = getClickAudio();
+  audio.volume = getEffectiveSfxVolume();
   audio.currentTime = 0;
   void audio.play().catch(() => {});
+}
+
+function setSfxVolume(volume) {
+  const normalized = Number(volume);
+  sfxVolume = Number.isFinite(normalized) ? Math.min(1, Math.max(0, normalized)) : 1;
+}
+
+function setSfxMuted(muted) {
+  sfxMuted = Boolean(muted);
 }
 
 function pressTargetElement(target) {
@@ -124,4 +151,6 @@ document.addEventListener("contextmenu", (event) => {
 
 window.UiSound = {
   playClickSound,
+  setVolume: setSfxVolume,
+  setMuted: setSfxMuted,
 };

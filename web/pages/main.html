@@ -87,8 +87,12 @@
     <button type="button" class="settings-btn" id="settings-btn" aria-label="Settings" aria-haspopup="dialog" aria-expanded="false" aria-controls="settings-menu"></button>
 
     <div class="settings-menu" id="settings-menu" role="dialog" aria-label="Settings" hidden>
-      <button type="button" class="bazaar__btn bazaar__btn--yellow" id="settings-server-btn">Server Selection</button>
-      <button type="button" class="bazaar__btn bazaar__btn--buy" id="settings-quit-btn">Quit Game</button>
+      <div class="settings-menu__actions">
+        <button type="button" class="bazaar__btn bazaar__btn--purple" id="settings-game-config-btn">Game Configuration</button>
+        <button type="button" class="bazaar__btn bazaar__btn--yellow" id="settings-server-btn">Server Selection</button>
+        <button type="button" class="bazaar__btn bazaar__btn--buy" id="settings-quit-btn">Quit Game</button>
+      </div>
+      <button type="button" class="settings-menu__inventory-btn" id="settings-inventory-btn" aria-label="Inventory"></button>
     </div>
 
     <div class="login-info-layer" id="main-info-layer" hidden>
@@ -216,15 +220,157 @@
         </div>
       </div>
     </div>
+
+    <div class="inventory-layer" id="inventory-layer" hidden>
+      <div class="inventory inventory--floating bazaar" id="inventory-root" role="dialog" aria-label="Inventory">
+        <header class="bazaar__titlebar inventory__titlebar" id="inventory-titlebar">
+          <span class="bazaar__title">Inventory</span>
+          <button type="button" class="bazaar__close" id="inventory-close" aria-label="Close"></button>
+        </header>
+
+        <div class="bazaar__frame inventory__frame">
+          <div class="inventory__body">
+            <div class="inventory__tab-wrapper">
+              <div class="inventory__grid-wrapper">
+                <div class="inventory__grid-scroll">
+                  <div class="inventory__grid" id="inventory-grid" aria-label="Inventory slots"></div>
+                </div>
+              </div>
+              <nav class="inventory__tabs" aria-label="Inventory tabs">
+                <button type="button" class="inventory__tab inventory__tab--pocket inventory__tab--active" data-tab="equip">EQUIP</button>
+                <button type="button" class="inventory__tab inventory__tab--pocket" data-tab="main">MAIN</button>
+                <button type="button" class="inventory__tab inventory__tab--pocket" data-tab="etc">ETC</button>
+                <button type="button" class="inventory__tab inventory__tab--additional" data-tab="additional">ADDITIONAL</button>
+                <button type="button" class="inventory__tab inventory__tab--fish" data-tab="fish" title="Fish wiki" aria-label="Fish wiki"></button>
+              </nav>
+            </div>
+          </div>
+
+          <footer class="inventory__footer bazaar__footer">
+            <div class="bazaar__gold inventory__gold">
+              <span class="bazaar__gold-prefix" aria-hidden="true">G</span>
+              <input type="text" class="bazaar__gold-input" id="inventory-gold" readonly value="" />
+            </div>
+            <button type="button" class="inventory__discard-btn" id="inventory-discard-btn" title="Discard" aria-label="Discard">
+              <svg class="inventory__discard-arrow" viewBox="0 0 16 12" aria-hidden="true">
+                <path fill="currentColor" d="M1 6h9.2l-2.4-2.3 1.1-1.1 4.3 4.3-4.3 4.3-1.1-1.1 2.4-2.3H1V6z" />
+              </svg>
+              <svg class="inventory__discard-trash" viewBox="0 0 12 14" aria-hidden="true">
+                <path fill="currentColor" d="M2.2 4.5h7.6l-.7 8.2c0 .6-.5 1.1-1.1 1.1H4c-.6 0-1.1-.5-1.1-1.1L2.2 4.5zm1.8-2.4h3c.5 0 .9.4.9.9v.6H3.1V3c0-.5.4-.9.9-.9zM1 3.6h10v1.2H1V3.6z" />
+              </svg>
+            </button>
+          </footer>
+        </div>
+      </div>
+    </div>
+
+    <div class="inventory-additional-layer" id="inventory-mount-layer" data-pocket="mount" hidden>
+      <div class="inventory inventory--floating inventory--additional bazaar" id="inventory-mount-root" role="dialog" aria-label="Mount inventory">
+        <header class="bazaar__titlebar inventory__titlebar" data-drag-titlebar>
+          <span class="bazaar__title">Mount</span>
+          <button type="button" class="bazaar__close" data-close-additional aria-label="Close"></button>
+        </header>
+        <div class="bazaar__frame inventory__frame inventory__frame--additional">
+          <div class="inventory__grid-wrapper inventory__grid-wrapper--solo">
+            <div class="inventory__grid-scroll">
+              <div class="inventory__grid" id="inventory-mount-grid" aria-label="Mount inventory slots"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="inventory-additional-layer" id="inventory-card-layer" data-pocket="card" hidden>
+      <div class="inventory inventory--floating inventory--additional bazaar" id="inventory-card-root" role="dialog" aria-label="Card inventory">
+        <header class="bazaar__titlebar inventory__titlebar" data-drag-titlebar>
+          <span class="bazaar__title">Card</span>
+          <button type="button" class="bazaar__close" data-close-additional aria-label="Close"></button>
+        </header>
+        <div class="bazaar__frame inventory__frame inventory__frame--additional">
+          <div class="inventory__grid-wrapper inventory__grid-wrapper--solo">
+            <div class="inventory__grid-scroll">
+              <div class="inventory__grid" id="inventory-card-grid" aria-label="Card inventory slots"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="inventory-additional-layer" id="inventory-costume-layer" data-pocket="costume" hidden>
+      <div class="inventory inventory--floating inventory--additional bazaar" id="inventory-costume-root" role="dialog" aria-label="Costume inventory">
+        <header class="bazaar__titlebar inventory__titlebar" data-drag-titlebar>
+          <span class="bazaar__title">Costume</span>
+          <button type="button" class="bazaar__close" data-close-additional aria-label="Close"></button>
+        </header>
+        <div class="bazaar__frame inventory__frame inventory__frame--additional">
+          <div class="inventory__grid-wrapper inventory__grid-wrapper--solo">
+            <div class="inventory__grid-scroll">
+              <div class="inventory__grid" id="inventory-costume-grid" aria-label="Costume inventory slots"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="game-config-layer" id="game-config-layer" hidden>
+      <div class="game-config bazaar" id="game-config-root" role="dialog" aria-label="Game Configuration">
+        <header class="bazaar__titlebar game-config__titlebar" id="game-config-titlebar">
+          <span class="game-config__title">Game Configuration</span>
+          <button type="button" class="bazaar__close" id="game-config-close" aria-label="Close"></button>
+        </header>
+
+        <div class="game-config__frame">
+          <h2 class="game-config__section-title">Display Configuration</h2>
+          <div class="game-config__panel">
+            <div class="game-config__resolution-row">
+              <span class="game-config__label">Resolution</span>
+              <label class="game-config__window-mode">
+                <input type="checkbox" id="game-config-window-mode" checked />
+                <span>Window Mode</span>
+              </label>
+            </div>
+            <div class="game-config__display-grid" id="game-config-display-grid"></div>
+          </div>
+
+          <h2 class="game-config__section-title">Sound</h2>
+          <div class="game-config__panel">
+            <div class="game-config__sound-row">
+              <span class="game-config__label game-config__label--sound">Sound Effects</span>
+              <div class="game-config__sound-controls">
+                <input type="range" class="game-config__slider" id="game-config-sfx-volume" min="0" max="100" value="100" />
+                <input type="checkbox" class="game-config__mute" id="game-config-sfx-mute" aria-label="Mute sound effects" />
+              </div>
+            </div>
+            <div class="game-config__sound-row">
+              <span class="game-config__label game-config__label--sound">BGM</span>
+              <div class="game-config__sound-controls">
+                <input type="range" class="game-config__slider" id="game-config-bgm-volume" min="0" max="100" value="45" />
+                <input type="checkbox" class="game-config__mute" id="game-config-bgm-mute" aria-label="Mute BGM" />
+              </div>
+            </div>
+          </div>
+
+          <div class="game-config__footer">
+            <button type="button" class="bazaar__btn game-config__footer-btn" id="game-config-reset-ui">Reset UI Position</button>
+            <button type="button" class="bazaar__btn bazaar__btn--purple game-config__footer-btn" id="game-config-options">Options</button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
   </div>
 
   <script src="/static/js/ui-sound.js"></script>
+  <script src="/static/js/item-classes.js"></script>
+  <script src="/static/js/item-icons.js"></script>
   <script src="/static/js/character-view.js"></script>
   <script src="/static/js/main-bgm.js"></script>
   <script src="/static/js/app.js"></script>
   <script src="/static/js/session-flow.js"></script>
   <script src="/static/js/chat.js"></script>
+  <script src="/static/js/window-focus.js"></script>
+  <script src="/static/js/inventory.js"></script>
+  <script src="/static/js/game-config.js"></script>
   <script src="/static/js/main.js"></script>
 </body>
 </html>

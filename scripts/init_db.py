@@ -4,6 +4,7 @@ import sqlite3
 
 from app_paths import app_root
 from data_vault import get_vault
+from item_catalog import ITEM_INSERT_SQL, build_item_rows, load_items_json
 
 ROOT = app_root()
 vault = get_vault(ROOT / "data")
@@ -46,6 +47,7 @@ CREATE TABLE IF NOT EXISTS items (
   ItemVNum INTEGER PRIMARY KEY,
   name TEXT NOT NULL,
   category TEXT NOT NULL,
+  IsAdventurer INTEGER NOT NULL DEFAULT 0,
   IsSwordsman INTEGER NOT NULL DEFAULT 0,
   IsArcher INTEGER NOT NULL DEFAULT 0,
   IsMage INTEGER NOT NULL DEFAULT 0,
@@ -68,7 +70,23 @@ CREATE TABLE IF NOT EXISTS items (
   DynamicGroupName TEXT,
   Shell TEXT,
   Effects TEXT,
-  Description TEXT
+  Description TEXT,
+  NameCode TEXT,
+  DescCode TEXT,
+  LineDesc INTEGER NOT NULL DEFAULT 0,
+  InventoryType INTEGER NOT NULL DEFAULT 0,
+  ItemType INTEGER NOT NULL DEFAULT 0,
+  ItemSubType INTEGER NOT NULL DEFAULT 0,
+  EquipmentSlot INTEGER NOT NULL DEFAULT 0,
+  IconId INTEGER NOT NULL DEFAULT 0,
+  Design INTEGER NOT NULL DEFAULT 0,
+  RawUnknown INTEGER NOT NULL DEFAULT 0,
+  ClassMask INTEGER NOT NULL DEFAULT 0,
+  FlagJson TEXT NOT NULL DEFAULT '{}',
+  BuffCodeJson TEXT NOT NULL DEFAULT '[]',
+  BuffJson TEXT NOT NULL DEFAULT '{}',
+  NameI18nJson TEXT NOT NULL DEFAULT '{}',
+  DescI18nJson TEXT NOT NULL DEFAULT '{}'
 );
 
 CREATE TABLE IF NOT EXISTS item_instances (
@@ -76,6 +94,17 @@ CREATE TABLE IF NOT EXISTS item_instances (
   ItemVNum INTEGER NOT NULL,
   Quantity INTEGER NOT NULL DEFAULT 1,
   FOREIGN KEY (ItemVNum) REFERENCES items(ItemVNum)
+);
+
+CREATE TABLE IF NOT EXISTS character_inventory (
+  character_id INTEGER NOT NULL,
+  pocket INTEGER NOT NULL,
+  slot INTEGER NOT NULL,
+  item_instance_id INTEGER NOT NULL UNIQUE,
+  FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE,
+  FOREIGN KEY (item_instance_id) REFERENCES item_instances(id) ON DELETE CASCADE,
+  UNIQUE(character_id, pocket, slot),
+  CHECK(slot BETWEEN 0 AND 47)
 );
 
 CREATE TABLE IF NOT EXISTS bazaar (
@@ -92,13 +121,24 @@ CREATE INDEX IF NOT EXISTS idx_bazaar_character ON bazaar(character_id);
 CREATE INDEX IF NOT EXISTS idx_bazaar_instance ON bazaar(item_instance_id);
 CREATE INDEX IF NOT EXISTS idx_bazaar_list_date ON bazaar(list_date);
 CREATE INDEX IF NOT EXISTS idx_item_instances_vnum ON item_instances(ItemVNum);
+CREATE INDEX IF NOT EXISTS idx_character_inventory_character ON character_inventory(character_id);
+CREATE INDEX IF NOT EXISTS idx_character_inventory_instance ON character_inventory(item_instance_id);
 CREATE INDEX IF NOT EXISTS idx_characters_account ON characters(account_id);
+CREATE INDEX IF NOT EXISTS idx_items_category ON items(category);
+CREATE INDEX IF NOT EXISTS idx_items_item_type ON items(ItemType, ItemSubType);
 
 CREATE TABLE IF NOT EXISTS skills (
   name TEXT PRIMARY KEY,
   description TEXT
 );
 """
+
+
+def import_items(conn: sqlite3.Connection) -> int:
+    raw_items = load_items_json(ROOT)
+    rows = build_item_rows(raw_items)
+    conn.executemany(ITEM_INSERT_SQL, rows)
+    return len(rows)
 
 
 def main() -> None:
@@ -108,11 +148,12 @@ def main() -> None:
 
     conn = sqlite3.connect(work_db)
     conn.executescript(SCHEMA_SQL)
+    item_count = import_items(conn)
     conn.commit()
     conn.close()
 
     vault.persist_db()
-    print("Wrote empty nosbazaar.db to data vault")
+    print(f"Wrote nosbazaar.db to data vault with {item_count} items")
 
 
 if __name__ == "__main__":

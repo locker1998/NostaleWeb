@@ -37,6 +37,7 @@ function showAlertDialog(message, onConfirm) {
     }
   };
   infoSecondaryHandler = null;
+  window.bringDialogLayerToFront?.(infoLayer);
   infoLayer.hidden = false;
 }
 
@@ -49,6 +50,7 @@ function showInfoDialog(message) {
   infoSecondary.hidden = true;
   infoPrimaryHandler = hideInfoDialog;
   infoSecondaryHandler = null;
+  window.bringDialogLayerToFront?.(infoLayer);
   infoLayer.hidden = false;
 }
 
@@ -67,6 +69,7 @@ function showConfirmDialog(message, onConfirm) {
     }
   };
   infoSecondaryHandler = hideInfoDialog;
+  window.bringDialogLayerToFront?.(infoLayer);
   infoLayer.hidden = false;
 }
 
@@ -141,10 +144,19 @@ function renderCharacters(characterRows, maxSlots, channel) {
       label.className = "selection-list__create";
       label.textContent = "Create Character";
       button.appendChild(label);
-      button.addEventListener("click", () => {
-        void window.ScreenTransition.navigateInstant(
-          `/play/create-character?slot=${slot}`,
-        );
+      button.addEventListener("pointerdown", (event) => {
+        if (event.button !== 0) {
+          return;
+        }
+        window.UiSound?.playClickSound?.();
+      });
+      button.addEventListener("click", (event) => {
+        event.preventDefault();
+        window.setTimeout(() => {
+          void window.ScreenTransition.navigateInstant(
+            `/play/create-character?slot=${slot}`,
+          );
+        }, 80);
       });
     }
 

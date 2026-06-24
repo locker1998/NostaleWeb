@@ -30,6 +30,20 @@ from auth_config import (
     verify_superadmin,
 )
 from data_vault import ensure_vault_compiled, get_vault
+from inventory import (
+    POCKET_COSTUME,
+    POCKET_EQUIPMENT,
+    POCKET_ETC,
+    POCKET_MAIN,
+    POCKET_SLOT_COUNT,
+    POCKET_SPECIALIST,
+    add_item_to_character_inventory,
+    discard_inventory_item,
+    is_mount_item,
+    move_inventory_item,
+    pocket_id_to_key,
+)
+from item_catalog import class_abbreviations, class_display, item_icon_url
 from routing.router import (
     ADMIN_ACCOUNTS,
     ADMIN_CHARACTERS,
@@ -750,6 +764,7 @@ ITEM_SELECT_SQL = """
   i.ItemVNum,
   i.name,
   i.category,
+  i.IsAdventurer,
   i.IsSwordsman,
   i.IsArcher,
   i.IsMage,
@@ -772,15 +787,33 @@ ITEM_SELECT_SQL = """
   i.DynamicGroupName,
   i.Shell,
   i.Effects,
-  i.Description
+  i.Description,
+  i.NameCode,
+  i.DescCode,
+  i.LineDesc,
+  i.InventoryType,
+  i.ItemType,
+  i.ItemSubType,
+  i.EquipmentSlot,
+  i.IconId,
+  i.Design,
+  i.RawUnknown,
+  i.ClassMask,
+  i.FlagJson,
+  i.BuffCodeJson,
+  i.BuffJson,
+  i.NameI18nJson,
+  i.DescI18nJson
 """
 
 
 def item_to_dict(row: sqlite3.Row) -> dict:
+    class_mask = int(row["ClassMask"] or 0)
     return {
         "itemVNum": row["ItemVNum"],
         "name": row["name"],
         "category": row["category"],
+        "isAdventurer": bool(row["IsAdventurer"]),
         "isSwordsman": bool(row["IsSwordsman"]),
         "isArcher": bool(row["IsArcher"]),
         "isMage": bool(row["IsMage"]),
@@ -804,6 +837,82 @@ def item_to_dict(row: sqlite3.Row) -> dict:
         "shell": row["Shell"],
         "effects": row["Effects"],
         "description": row["Description"],
+        "nameCode": row["NameCode"],
+        "descCode": row["DescCode"],
+        "lineDesc": row["LineDesc"],
+        "inventoryType": row["InventoryType"],
+        "itemType": row["ItemType"],
+        "itemSubType": row["ItemSubType"],
+        "equipmentSlot": row["EquipmentSlot"],
+        "iconId": row["IconId"],
+        "design": row["Design"],
+        "rawUnknown": row["RawUnknown"],
+        "classMask": class_mask,
+        "classAbbreviations": class_abbreviations(class_mask),
+        "classDisplay": class_display(class_mask),
+        "iconUrl": item_icon_url(row["ItemVNum"]),
+        "flag": json.loads(row["FlagJson"] or "{}"),
+        "buffCode": json.loads(row["BuffCodeJson"] or "[]"),
+        "buff": json.loads(row["BuffJson"] or "{}"),
+        "nameI18n": json.loads(row["NameI18nJson"] or "{}"),
+        "descI18n": json.loads(row["DescI18nJson"] or "{}"),
+    }
+
+
+def fetch_character_inventory(conn: sqlite3.Connection, character_id: int) -> dict[str, Any]:
+    rows = conn.execute(
+        f"""
+        SELECT
+          ci.pocket,
+          ci.slot,
+          ii.id AS item_instance_id,
+          ii.Quantity AS quantity,
+          {ITEM_SELECT_SQL}
+        FROM character_inventory ci
+        JOIN item_instances ii ON ci.item_instance_id = ii.id
+        JOIN items i ON ii.ItemVNum = i.ItemVNum
+        WHERE ci.character_id = ?
+        ORDER BY ci.pocket, ci.slot
+        """,
+        (character_id,),
+    ).fetchall()
+
+    pocket_items: dict[int, list[dict[str, Any]]] = {
+        POCKET_EQUIPMENT: [],
+        POCKET_MAIN: [],
+        POCKET_ETC: [],
+        POCKET_SPECIALIST: [],
+        POCKET_COSTUME: [],
+    }
+    mount_items: list[dict[str, Any]] = []
+
+    for row in rows:
+        entry = {
+            "slot": int(row["slot"]),
+            "pocket": pocket_id_to_key(pocket),
+            "instanceId": int(row["item_instance_id"]),
+            "quantity": int(row["quantity"]),
+            "item": item_to_dict(row),
+        }
+        pocket = int(row["pocket"])
+        if pocket in pocket_items:
+            pocket_items[pocket].append(entry)
+        if is_mount_item(row):
+            mount_items.append(entry)
+
+    def pocket_payload(items: list[dict[str, Any]]) -> dict[str, Any]:
+        return {"slotCount": POCKET_SLOT_COUNT, "items": items}
+
+    return {
+        "slotCount": POCKET_SLOT_COUNT,
+        "pockets": {
+            "equip": pocket_payload(pocket_items[POCKET_EQUIPMENT]),
+            "main": pocket_payload(pocket_items[POCKET_MAIN]),
+            "etc": pocket_payload(pocket_items[POCKET_ETC]),
+            "card": pocket_payload(pocket_items[POCKET_SPECIALIST]),
+            "costume": pocket_payload(pocket_items[POCKET_COSTUME]),
+            "mount": {"items": mount_items},
+        },
     }
 
 
@@ -833,7 +942,9 @@ def fetch_listings(conn: sqlite3.Connection) -> list[dict]:
         {
             "id": str(row["id"]),
             "name": row["name"],
-            "iconId": row["ItemVNum"],
+            "itemVNum": row["ItemVNum"],
+            "iconId": row["IconId"] or row["ItemVNum"],
+            "iconUrl": item_icon_url(row["ItemVNum"]),
             "amount": row["quantity"],
             "price": row["listing_price"],
             "days": max(0, row["days_left"]),
@@ -1260,13 +1371,14 @@ def latest_chat_id() -> int:
         return int(chat_messages[-1]["id"])
 
 
-def append_private_command(text: str, recipient_name: str) -> dict[str, Any]:
+def append_private_command(text: str, recipient_name: str, **extra: Any) -> dict[str, Any]:
     return append_chat_message(
         {
             "channel": "system",
             "kind": "app",
             "text": text,
             "recipientName": recipient_name,
+            **extra,
         }
     )
 
@@ -1336,7 +1448,7 @@ def unmute_character_by_name(name: str) -> str:
     return f"{display_name} has been unmuted."
 
 
-def gm_create_item(item_vnum: int, amount: int) -> str:
+def gm_create_item(character_id: int, item_vnum: int, amount: int) -> str:
     if amount < 1 or amount > 9999:
         raise ValueError("Amount must be between 1 and 9999")
 
@@ -1348,14 +1460,26 @@ def gm_create_item(item_vnum: int, amount: int) -> str:
         if item is None:
             raise ValueError(f"Unknown item vnum: {item_vnum}")
 
-        conn.execute(
-            "INSERT INTO item_instances (ItemVNum, Quantity) VALUES (?, ?)",
-            (item_vnum, amount),
-        )
-        instance_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
-        conn.commit()
+        character = get_character(conn, character_id)
+        if character is None:
+            raise ValueError("Character not found.")
 
-    return f"Created {amount}x {item['name']} (instance #{instance_id})."
+        pocket, slot, added = add_item_to_character_inventory(
+            conn, character_id, item_vnum, amount
+        )
+
+    pocket_names = {
+        POCKET_EQUIPMENT: "EQUIP",
+        POCKET_MAIN: "MAIN",
+        POCKET_ETC: "ETC",
+        POCKET_SPECIALIST: "CARD",
+        POCKET_COSTUME: "COSTUME",
+    }
+    pocket_name = pocket_names.get(pocket, str(pocket))
+    return (
+        f"Created {added}x {item['name']} in {pocket_name} "
+        f"(slot {slot + 1}) for {character['name']}."
+    )
 
 
 def build_chat_command_help(is_admin: bool, is_gm: bool) -> str:
@@ -1369,7 +1493,7 @@ def build_chat_command_help(is_admin: bool, is_gm: bool) -> str:
 
 def parse_chat_command(body: str) -> tuple[str, list[str]]:
     text = body.strip()
-    if not text.startswith("$"):
+    if not (text.startswith("$") or text.startswith("%")):
         raise ValueError("Not a command")
 
     parts = text[1:].split()
@@ -1416,6 +1540,9 @@ def handle_chat_command(state: SessionState, body: str) -> list[dict[str, Any]]:
 
     def reply(text: str) -> list[dict[str, Any]]:
         return [append_private_command(text, recipient_name)]
+
+    def reply_inventory(text: str) -> list[dict[str, Any]]:
+        return [append_private_command(text, recipient_name, inventoryChanged=True)]
 
     def deny() -> list[dict[str, Any]]:
         return reply("You do not have permission to use this command.")
@@ -1485,7 +1612,9 @@ def handle_chat_command(state: SessionState, body: str) -> list[dict[str, Any]]:
         try:
             item_vnum = int(args[0])
             amount = int(args[1])
-            return reply(gm_create_item(item_vnum, amount))
+            if state.character_id is None:
+                return reply("Select a character before using $createitem.")
+            return reply_inventory(gm_create_item(state.character_id, item_vnum, amount))
         except (TypeError, ValueError) as exc:
             if isinstance(exc, ValueError) and str(exc).startswith(("Unknown item", "Amount must")):
                 return reply(str(exc))
@@ -2584,6 +2713,22 @@ class BazaarHandler(SimpleHTTPRequestHandler):
             with get_connection() as conn:
                 return self._json_response({"listings": fetch_listings(conn)})
 
+        if path == "/api/inventory":
+            state = self._session_state()
+            if not self._session_ready_for_game():
+                return self._json_response({"error": "Unauthorized"}, status=HTTPStatus.UNAUTHORIZED)
+            with get_connection() as conn:
+                character = get_character(conn, state.character_id)
+                if character is None:
+                    return self._json_response({"error": "Character not found"}, status=HTTPStatus.BAD_REQUEST)
+                inventory = fetch_character_inventory(conn, state.character_id)
+                return self._json_response(
+                    {
+                        "inventory": inventory,
+                        "gold": int(character["gold"]),
+                    }
+                )
+
         if path == "/api/chat":
             state = self._session_state()
             if not self._session_ready_for_game():
@@ -2968,6 +3113,40 @@ class BazaarHandler(SimpleHTTPRequestHandler):
                 return self._json_response({"error": "Invalid JSON"}, status=HTTPStatus.BAD_REQUEST)
             return self._json_response(payload)
 
+        if path == "/api/inventory/move":
+            state = self._session_state()
+            if not self._session_ready_for_game():
+                return self._json_response({"error": "Unauthorized"}, status=HTTPStatus.UNAUTHORIZED)
+            try:
+                payload = self._read_json()
+                instance_id = int(payload.get("instanceId"))
+                pocket = str(payload.get("pocket", "")).strip().lower()
+                slot = int(payload.get("slot"))
+                with get_connection() as conn:
+                    move_inventory_item(conn, state.character_id, instance_id, pocket, slot)
+                    inventory = fetch_character_inventory(conn, state.character_id)
+                return self._json_response({"ok": True, "inventory": inventory})
+            except (TypeError, ValueError) as exc:
+                return self._json_response({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            except json.JSONDecodeError:
+                return self._json_response({"error": "Invalid JSON"}, status=HTTPStatus.BAD_REQUEST)
+
+        if path == "/api/inventory/discard":
+            state = self._session_state()
+            if not self._session_ready_for_game():
+                return self._json_response({"error": "Unauthorized"}, status=HTTPStatus.UNAUTHORIZED)
+            try:
+                payload = self._read_json()
+                instance_id = int(payload.get("instanceId"))
+                with get_connection() as conn:
+                    discard_inventory_item(conn, state.character_id, instance_id)
+                    inventory = fetch_character_inventory(conn, state.character_id)
+                return self._json_response({"ok": True, "inventory": inventory})
+            except (TypeError, ValueError) as exc:
+                return self._json_response({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            except json.JSONDecodeError:
+                return self._json_response({"error": "Invalid JSON"}, status=HTTPStatus.BAD_REQUEST)
+
         self.send_error(HTTPStatus.NOT_FOUND)
 
     def do_PUT(self) -> None:
@@ -3176,6 +3355,32 @@ def migrate_database() -> None:
                 "UPDATE characters SET hair_colour = hair_colour + 1 "
                 "WHERE hair_colour BETWEEN 0 AND 9"
             )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS character_inventory (
+              character_id INTEGER NOT NULL,
+              pocket INTEGER NOT NULL,
+              slot INTEGER NOT NULL,
+              item_instance_id INTEGER NOT NULL UNIQUE,
+              FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE,
+              FOREIGN KEY (item_instance_id) REFERENCES item_instances(id) ON DELETE CASCADE,
+              UNIQUE(character_id, pocket, slot),
+              CHECK(slot BETWEEN 0 AND 47)
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_character_inventory_character
+            ON character_inventory(character_id)
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_character_inventory_instance
+            ON character_inventory(item_instance_id)
+            """
+        )
         conn.commit()
     finally:
         conn.close()

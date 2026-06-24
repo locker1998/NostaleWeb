@@ -19,6 +19,16 @@ const LOGIN_ORIGIN_STORAGE_KEY = "nosbazaar.loginOrigin";
 const CONNECTION_WATCH_MS = 4000;
 const DISCONNECT_MESSAGE = "Disconnected from server.";
 
+function bringDialogLayerToFront(layer) {
+  if (!layer) {
+    return;
+  }
+  const host = document.querySelector(".play-viewport") || document.body;
+  host.appendChild(layer);
+}
+
+window.bringDialogLayerToFront = bringDialogLayerToFront;
+
 const nativeFetch = window.fetch.bind(window);
 
 function isPlayPath(pathname = window.location.pathname) {
@@ -228,6 +238,7 @@ function showBuiltinDisconnectDialog(onConfirm) {
 
   dialog.message.textContent = DISCONNECT_MESSAGE;
   builtinDisconnectConfirm = onConfirm;
+  bringDialogLayerToFront(dialog.layer);
   dialog.layer.hidden = false;
 }
 

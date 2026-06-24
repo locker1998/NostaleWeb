@@ -4,17 +4,39 @@ const MAIN_BGM_VOLUME = 0.45;
 let mainBgmAudio = null;
 let mainBgmStarted = false;
 let mainBgmStartScheduled = false;
-
+let bgmVolume = MAIN_BGM_VOLUME;
+let bgmMuted = false;
 function getMainBgmAudio() {
   if (!mainBgmAudio) {
     mainBgmAudio = new Audio(MAIN_BGM_SRC);
     mainBgmAudio.loop = true;
     mainBgmAudio.preload = "auto";
-    mainBgmAudio.volume = MAIN_BGM_VOLUME;
+    mainBgmAudio.volume = bgmMuted ? 0 : bgmVolume;
   }
   return mainBgmAudio;
 }
 
+function applyBgmVolume() {
+  const audio = getMainBgmAudio();
+  audio.volume = bgmMuted ? 0 : bgmVolume;
+}
+
+function setBgmVolume(volume) {
+  const normalized = Number(volume);
+  bgmVolume = Number.isFinite(normalized) ? Math.min(1, Math.max(0, normalized)) : MAIN_BGM_VOLUME;
+  applyBgmVolume();
+}
+
+function setBgmMuted(muted) {
+  bgmMuted = Boolean(muted);
+  applyBgmVolume();
+  const audio = getMainBgmAudio();
+  if (bgmMuted) {
+    audio.pause();
+    return;
+  }
+  void resumeMainBgm();
+}
 function shouldDelayForScreenFadeIn() {
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
     return false;
@@ -39,15 +61,32 @@ function getMainBgmStartDelayMs() {
 }
 
 async function startMainBgm() {
-  if (mainBgmStarted) {
+  if (bgmMuted) {
     return;
   }
+
   const audio = getMainBgmAudio();
   try {
     await audio.play();
     mainBgmStarted = true;
   } catch {
     // Autoplay blocked until the player interacts.
+  }
+}
+
+async function resumeMainBgm() {
+  if (bgmMuted) {
+    return;
+  }
+
+  const audio = getMainBgmAudio();
+  try {
+    if (audio.paused) {
+      await audio.play();
+    }
+    mainBgmStarted = true;
+  } catch {
+    // Playback may still be blocked until the player interacts.
   }
 }
 
@@ -85,6 +124,9 @@ if (document.readyState === "loading") {
 
 window.MainBgm = {
   start: startMainBgm,
+  resume: resumeMainBgm,
+  setVolume: setBgmVolume,
+  setMuted: setBgmMuted,
   pause() {
     getMainBgmAudio().pause();
   },

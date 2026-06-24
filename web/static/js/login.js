@@ -38,6 +38,7 @@ function showInfoDialog(message, { showCancel = false, onConfirm, onCancel } = {
   infoSecondary.disabled = false;
   infoPrimaryHandler = onConfirm || hideInfoDialog;
   infoSecondaryHandler = onCancel || hideInfoDialog;
+  window.bringDialogLayerToFront?.(infoLayer);
   infoLayer.hidden = false;
   setLoginFormEnabled(false);
 }

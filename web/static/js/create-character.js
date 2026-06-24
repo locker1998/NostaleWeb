@@ -705,7 +705,10 @@ function wireFormHandlers() {
     if (actionInProgress) {
       return;
     }
-    void window.ScreenTransition.navigateInstant("/play/select-character");
+    window.UiSound?.playClickSound?.();
+    window.setTimeout(() => {
+      void window.ScreenTransition.navigateInstant("/play/select-character");
+    }, 80);
   });
 }
 

@@ -82,6 +82,7 @@ function showPlayAlert(message, onConfirm) {
   }
   dialog.primary.disabled = false;
   primaryHandler = onConfirm || null;
+  window.bringDialogLayerToFront?.(dialog.layer);
   dialog.layer.hidden = false;
 }
 

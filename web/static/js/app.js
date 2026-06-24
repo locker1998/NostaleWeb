@@ -1,4 +1,8 @@
-const ICON_BASE = "https://nosapki.com/images/icons";
+function iconUrl(listing) {
+  if (listing.iconUrl) return listing.iconUrl;
+  if (window.ItemIcons?.itemIconUrl) return window.ItemIcons.itemIconUrl(listing);
+  return null;
+}
 
 let data = null;
 let allListings = [];
@@ -694,6 +698,7 @@ function openBazaarWindow() {
   root.style.top = "0px";
   layer.hidden = false;
   scheduleBazaarReposition();
+  window.NosWindowFocus?.bringToFront?.(root);
   loadData();
 }
 

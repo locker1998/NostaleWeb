@@ -171,8 +171,9 @@ function parseOutgoingChat(raw) {
     return null;
   }
 
-  if (text.startsWith("$")) {
-    return { type: "command", body: text };
+  if (text.startsWith("$") || text.startsWith("%")) {
+    const normalized = `$${text.slice(1)}`;
+    return { type: "command", body: normalized };
   }
 
   if (text.startsWith("/")) {
@@ -235,6 +236,19 @@ function isServerMessageForPlayer(message) {
   return true;
 }
 
+function shouldRefreshInventory(message) {
+  if (!message) {
+    return false;
+  }
+  if (message.inventoryChanged) {
+    return true;
+  }
+  if (message.kind !== "app" && message.kind !== "command") {
+    return false;
+  }
+  return /^Created \d+x /i.test(message.text || "");
+}
+
 function ingestServerMessage(message) {
   if (message.id != null) {
     if (messages.some((entry) => entry.id === message.id)) {
@@ -249,6 +263,10 @@ function ingestServerMessage(message) {
   }
 
   pushMessage(message);
+
+  if (shouldRefreshInventory(message)) {
+    void window.NosInventory?.reload?.();
+  }
 }
 
 async function pollChat() {

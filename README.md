@@ -97,7 +97,7 @@ Paste the output into `config/auth.json`. Default dev credentials: `superadmin` 
 | `web/static/css/`, `web/static/js/` | Styles and frontend scripts |
 | `config/channels.json` | Login port and channel index → port map |
 | `config/auth.json` | Superadmin username and encrypted password |
-| `scripts/init_db.py` | Empty database schema and init script |
+| `scripts/init_db.py` | Database schema plus item import from itempicker.atlagaming.eu |
 | `/assets/...` | Game assets served from encrypted vault |
 
 ## API overview
@@ -109,6 +109,7 @@ Paste the output into `config/auth.json`. Default dev credentials: `superadmin` 
 - `POST /api/start-channels` — start game channels (login port only). Body `{}` starts all stopped channels; `{ "channel": 3 }` starts channel index 3 only
 - `GET /api/me`, `GET /api/bootstrap`, `GET /api/skills`
 - `GET/PUT /api/preferences`
+- `GET /api/inventory` — character inventory pockets and gold
 - `POST /api/buy/{id}` — body `{ "quantity": N }`
 - `DELETE /api/bazaar` — remove all bazaar listings
 - `DELETE /api/item-instances` — remove all listings and item instances
@@ -160,4 +161,4 @@ The app decrypts on read. Assets are requested at `/assets/...` and served from 
 
 - Use `py scripts\server.py`, not `python -m http.server` — the UI needs the API.
 - If port 8080 is busy, stop the other process first.
-- Item icons load from [nosapki.com](https://nosapki.com/images/icons); an internet connection is required for icons.
+- Item icons load from the [itempicker API](https://itempicker.atlagaming.eu/about-api#item-icon) (`/api/items/icon/{itemVnum}`); an internet connection is required for icons.
