@@ -36,6 +36,8 @@ def main() -> None:
             "--onedir",
             "--name",
             "NostaleWeb",
+            "--paths",
+            str(SCRIPTS),
             "--hidden-import",
             "app_paths",
             "--hidden-import",
