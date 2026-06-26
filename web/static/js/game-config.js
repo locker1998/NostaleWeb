@@ -271,6 +271,11 @@
     rememberPosition: rememberWindowPosition,
   };
 
+  window.NosReplaceableWindows?.register("game-config", {
+    group: "game-config",
+    close: closeGameConfigWindow,
+  });
+
   window.addEventListener("resize", () => {
     if (layerEl && !layerEl.hidden && !userMoved) {
       positionGameConfigWindow();

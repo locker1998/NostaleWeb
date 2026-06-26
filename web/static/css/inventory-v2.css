@@ -1,0 +1,323 @@
+.inventory-v2-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 21;
+  pointer-events: none;
+}
+
+.inventory-v2 {
+  --inv2-slot-size: 34px;
+  --inv2-slot-gap: 2px;
+  --inv2-visible-rows: 6;
+  --inv2-cols: 9;
+  position: absolute;
+  width: calc(
+    var(--inv2-cols) * var(--inv2-slot-size) +
+      (var(--inv2-cols) - 1) * var(--inv2-slot-gap) + 28px
+  );
+  pointer-events: auto;
+  border: 1px solid #7a7a7a;
+  border-radius: var(--bz-radius-window);
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px #000, 0 0 1px 1px #000;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.inventory-v2__titlebar {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+  height: 22px;
+  padding: 0 4px 0 0;
+  background: linear-gradient(180deg, #3f3f3f 0%, #2a2a2a 45%, #111 46%, #000 100%);
+  border-bottom: 1px solid #555;
+  cursor: default;
+}
+
+.inventory-v2__titlebar .bazaar__close {
+  position: static;
+  justify-self: end;
+  flex-shrink: 0;
+}
+
+.inventory-v2__title {
+  padding: 4px 8px 0;
+  font-size: 12px;
+  line-height: 1;
+  color: #fff;
+  text-shadow: var(--nt-txt-shadow);
+  white-space: nowrap;
+}
+
+.inventory-v2__search {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  min-width: 0;
+  padding-top: 2px;
+}
+
+.inventory-v2__search-label {
+  font-size: 11px;
+  color: #d8d8d8;
+  text-shadow: var(--nt-txt-shadow);
+  white-space: nowrap;
+}
+
+.inventory-v2__search-input {
+  width: 92px;
+  max-width: 100%;
+  min-width: 0;
+  height: 16px;
+  padding: 0 4px;
+  border: 1px solid #1f1f1f;
+  border-radius: 2px;
+  background: #111;
+  color: #fff;
+  font: inherit;
+  font-size: 11px;
+}
+
+.inventory-v2__toolbar {
+  display: grid;
+  grid-template-columns: 18px 1fr 18px;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 4px 0;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.inventory-v2__tab-scroll {
+  width: 18px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid #4a4a4a;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #4a4a4a 0%, #2f2f2f 100%);
+  color: #fff;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.inventory-v2__tab-scroll:disabled {
+  opacity: 0.35;
+  cursor: default;
+  pointer-events: none;
+}
+
+.inventory-v2__tabs-viewport {
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-behavior: smooth;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.inventory-v2__tabs-viewport::-webkit-scrollbar {
+  display: none;
+}
+
+.inventory-v2__tabs {
+  display: flex;
+  gap: 2px;
+  width: max-content;
+  min-width: 100%;
+}
+
+.inventory-v2__tab {
+  flex: 0 0 auto;
+  min-width: 52px;
+  height: 22px;
+  padding: 0 6px;
+  border: 1px solid #4a4a4a;
+  border-bottom: none;
+  border-radius: 3px 3px 0 0;
+  background: linear-gradient(180deg, #4d5660 0%, #343b42 100%);
+  color: #d8d8d8;
+  font: inherit;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  text-shadow: var(--nt-txt-shadow);
+  cursor: default;
+}
+
+.inventory-v2__tab--active {
+  background: linear-gradient(180deg, #6f8ca8 0%, #4f6f8d 100%);
+  color: #fff;
+}
+
+.inventory-v2__body {
+  padding: 0 4px 4px;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.inventory-v2__grid-scroll {
+  height: calc(
+    var(--inv2-visible-rows) * var(--inv2-slot-size) +
+      (var(--inv2-visible-rows) - 1) * var(--inv2-slot-gap) + 8px
+  );
+  padding: 4px;
+  overflow-y: auto;
+  background: #3a424a;
+  border: 1px solid #2f2f2f;
+  scrollbar-width: thin;
+  scrollbar-color: #8a8a8a #2a2a2a;
+}
+
+.inventory-v2__grid-scroll::-webkit-scrollbar {
+  width: 10px;
+}
+
+.inventory-v2__grid-scroll::-webkit-scrollbar-track {
+  background: #2a2a2a;
+}
+
+.inventory-v2__grid-scroll::-webkit-scrollbar-thumb {
+  background: #8a8a8a;
+  border: 1px solid #1a1a1a;
+}
+
+.inventory-v2__grid {
+  display: grid;
+  grid-template-columns: repeat(var(--inv2-cols), var(--inv2-slot-size));
+  gap: var(--inv2-slot-gap);
+}
+
+.inventory-v2__slot,
+.inventory-v2__slot.inventory__slot {
+  position: relative;
+  width: var(--inv2-slot-size);
+  height: var(--inv2-slot-size);
+  border: 1px solid #2a2f35;
+  background: #4a5560;
+  box-sizing: border-box;
+}
+
+.inventory-v2__slot--locked,
+.inventory-v2__slot--locked.inventory__slot {
+  background: #1a1d21;
+  border-color: #17191c;
+}
+
+.inventory-v2__slot:not(.inventory-v2__slot--locked):hover {
+  outline: 1px solid #9ab0c4;
+}
+
+.inventory-v2__slot-icon {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+.inventory-v2__slot-qty {
+  position: absolute;
+  right: 1px;
+  bottom: 0;
+  font-size: 10px;
+  line-height: 1;
+  color: #fff;
+  text-shadow: var(--nt-txt-shadow);
+  pointer-events: none;
+}
+
+.inventory-v2__footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-height: 28px;
+  padding: 4px 6px 6px;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.inventory-v2__gold {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: stretch;
+  height: 20px;
+  margin-right: auto;
+}
+
+.inventory-v2__gold .bazaar__gold-input {
+  width: 100%;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.inventory-v2__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid #1a3f7a;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #2f78d6 0%, #234593 100%);
+  color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+  cursor: default;
+}
+
+.inventory-v2__icon {
+  display: block;
+  flex: 0 0 auto;
+  pointer-events: none;
+}
+
+.inventory-v2__icon--list {
+  width: 14px;
+  height: 14px;
+}
+
+.inventory-v2__icon--trash {
+  width: 11px;
+  height: 13px;
+}
+
+.inventory-v2__action--drop-target,
+.inventory-v2__discard-btn--drop-target {
+  outline: 2px solid #f5c478;
+}
+
+.inventory-v2--dragging .inventory-v2__titlebar {
+  cursor: default;
+}
+
+.inventory-v2--item-dragging {
+  cursor: default;
+}
+
+.inventory-v2__item-drag-ghost {
+  position: fixed;
+  z-index: 10000;
+  width: var(--inv2-slot-size);
+  height: var(--inv2-slot-size);
+  pointer-events: none;
+  opacity: 0.9;
+}
+
+.inventory-v2__slot--drag-source {
+  opacity: 0.45;
+}
+
+.inventory-v2__slot--drop-target {
+  outline: 2px solid #f5c478;
+}
+
+.inventory-v2__slot--hidden-by-search {
+  visibility: hidden;
+}
+
+.page-main .inventory-v2 {
+  left: 0;
+  top: 0;
+}

@@ -2222,6 +2222,11 @@ window.NosBazaar = {
   onInventoryDropForSell,
 };
 
+window.NosReplaceableWindows?.register("bazaar", {
+  group: "bazaar",
+  close: closeBazaarWindow,
+});
+
 if (!isEmbeddedBazaar()) {
   loadData();
 }

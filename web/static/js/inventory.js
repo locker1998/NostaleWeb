@@ -181,6 +181,9 @@
   }
 
   function isSellSlotDropActive() {
+    if (!window.NosFeatureFlags?.useNewBazaarInventory?.()) {
+      return false;
+    }
     const panel = document.querySelector('.bazaar__tab-panel[data-tab="list"]');
     if (!panel?.classList.contains("bazaar__tab-panel--active")) return false;
     const layer = document.getElementById("bazaar-layer");
@@ -836,24 +839,13 @@
     }
   }
 
-  function initInventoryHotkey() {
-    document.addEventListener("keydown", (event) => {
-      if (event.key !== "i" && event.key !== "I") return;
-      if (event.ctrlKey || event.altKey || event.metaKey) return;
-      if (isTypingTarget()) return;
-      event.preventDefault();
-      toggleInventoryWindow();
-    });
-  }
-
   closeBtn?.addEventListener("click", closeInventoryWindow);
 
   initInventoryTabs();
   initAdditionalWindows();
-  initInventoryHotkey();
   window.NosWindowFocus?.watch?.(rootEl);
 
-  window.NosInventory = {
+  window.NosInventoryClassic = {
     open: openInventoryWindow,
     close: closeInventoryWindow,
     toggle: toggleInventoryWindow,
@@ -865,6 +857,16 @@
     openAdditional: openAdditionalWindows,
     closeAdditional: closeAdditionalWindows,
   };
+
+  window.NosReplaceableWindows?.register("inventory-classic", {
+    group: "inventory",
+    close: closeInventoryWindow,
+  });
+
+  window.NosReplaceableWindows?.register("inventory-classic-additional", {
+    group: "inventory",
+    close: closeAdditionalWindows,
+  });
 
   window.addEventListener("resize", () => {
     if (layerEl && !layerEl.hidden) {

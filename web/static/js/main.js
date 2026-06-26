@@ -41,6 +41,7 @@ const mainInfoMessage = document.getElementById("main-info-message");
 const mainInfoPrimary = document.getElementById("main-info-primary");
 const mainInfoSecondary = document.getElementById("main-info-secondary");
 const serverClockTextEl = document.getElementById("server-clock-text");
+const newBazaarToggleBtn = document.getElementById("new-bazaar-toggle-btn");
 const mainCharacterViewEl = document.getElementById("main-character-view");
 const mainCharacterSpriteEl = document.getElementById("main-character-view-sprite");
 const mainCharacterNameEl = document.getElementById("main-character-name");
@@ -61,6 +62,11 @@ let inventoryDragState = null;
 let gameConfigDragState = null;
 let preferencesReady = false;
 let mainCharacterView = null;
+let useNewBazaarInventory = true;
+
+window.NosFeatureFlags = {
+  useNewBazaarInventory: () => useNewBazaarInventory,
+};
 
 function getHotkeyRows() {
   return altHotkeys ? HOTKEY_ROWS_ALT : HOTKEY_ROWS_DEFAULT;
@@ -166,8 +172,29 @@ function savePreferences() {
       skillPage: activePage,
       skillSlotsLocked: slotsLocked,
       skillAltHotkeys: altHotkeys,
+      newBazaarInventory: useNewBazaarInventory,
     }),
   });
+}
+
+function syncNewBazaarToggleUI() {
+  if (!newBazaarToggleBtn) return;
+  newBazaarToggleBtn.setAttribute("aria-checked", useNewBazaarInventory ? "true" : "false");
+}
+
+function applyNewBazaarInventoryMode() {
+  window.NosReplaceableWindows?.closeAll?.();
+  document.body.classList.toggle("play--new-ui", useNewBazaarInventory);
+  document.body.classList.toggle("play--classic-bazaar", !useNewBazaarInventory);
+  syncNewBazaarToggleUI();
+}
+
+function setNewBazaarInventory(enabled, { persist = true } = {}) {
+  useNewBazaarInventory = Boolean(enabled);
+  applyNewBazaarInventoryMode();
+  if (persist && preferencesReady) {
+    savePreferences();
+  }
 }
 
 function applyPreferences(prefs) {
@@ -175,6 +202,7 @@ function applyPreferences(prefs) {
   setActivePage(prefs.skillPage === 2 ? 2 : 1, { persist: false });
   setSlotsLocked(Boolean(prefs.skillSlotsLocked), { persist: false });
   setAltHotkeys(Boolean(prefs.skillAltHotkeys), { persist: false });
+  setNewBazaarInventory(prefs.newBazaarInventory !== false, { persist: false });
   preferencesReady = true;
 }
 
@@ -997,6 +1025,10 @@ settingsInventoryBtn?.addEventListener("click", () => {
   window.NosInventory?.toggle?.();
 });
 
+newBazaarToggleBtn?.addEventListener("click", () => {
+  setNewBazaarInventory(!useNewBazaarInventory);
+});
+
 mainInfoPrimary?.addEventListener("click", async () => {
   const handler = mainInfoPrimaryHandler;
   if (!handler) {
@@ -1096,7 +1128,8 @@ function boot() {
   initGameConfigDrag();
   window.NosWindowFocus?.init?.();
   initServerClock();
-  void loadMain();
+  applyNewBazaarInventoryMode();
+  loadMain();
 }
 
 boot();

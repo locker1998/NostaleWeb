@@ -7,6 +7,7 @@
   <title>Main</title>
   <link rel="stylesheet" href="/static/css/screen-transition.css" />
   <link rel="stylesheet" href="/static/css/bazaar.css" />
+  <link rel="stylesheet" href="/static/css/inventory-v2.css" />
   <script src="/static/js/screen-transition.js"></script>
 </head>
 <body class="play page-main">
@@ -17,8 +18,27 @@
       <div class="character-view__name" id="main-character-name" hidden></div>
     </div>
 
-    <div class="server-clock" id="server-clock" aria-label="Server time and channel">
-      <span class="server-clock__text" id="server-clock-text">00:00:00 CH1</span>
+    <div class="server-clock-panel" id="server-clock-panel">
+      <div class="server-clock" id="server-clock" aria-label="Server time and channel">
+        <span class="server-clock__text" id="server-clock-text">00:00:00 CH1</span>
+      </div>
+
+      <div class="feature-toggle" id="new-bazaar-toggle">
+        <button
+          type="button"
+          class="feature-toggle__switch"
+          id="new-bazaar-toggle-btn"
+          role="switch"
+          aria-checked="true"
+          aria-label="Use new NosBazaar inventory"
+        >
+          <span class="feature-toggle__label feature-toggle__label--classic">Classic</span>
+          <span class="feature-toggle__track" aria-hidden="true">
+            <span class="feature-toggle__thumb"></span>
+          </span>
+          <span class="feature-toggle__label feature-toggle__label--new">New</span>
+        </button>
+      </div>
     </div>
 
     <div class="skillbar" role="application" aria-label="Skill bar">
@@ -108,7 +128,7 @@
 
     <div class="skill-info-layer" id="skill-info-layer"></div>
 
-    <div class="bazaar-layer" id="bazaar-layer" hidden>
+    <div class="bazaar-layer replaceable-window-layer" id="bazaar-layer" data-replaceable="bazaar" hidden>
       <div class="bazaar bazaar--floating" id="bazaar-root" role="dialog" aria-label="NosBazaar">
         <header class="bazaar__titlebar" id="bazaar-titlebar">
           <span class="bazaar__title" id="window-title">NosBazaar</span>
@@ -347,7 +367,56 @@
       </div>
     </div>
 
-    <div class="inventory-layer" id="inventory-layer" hidden>
+    <div class="inventory-v2-layer replaceable-window-layer" id="inventory-v2-layer" data-replaceable="inventory" hidden>
+      <div class="inventory-v2" id="inventory-v2-root" role="dialog" aria-label="Inventory">
+        <header class="inventory-v2__titlebar" id="inventory-v2-titlebar">
+          <span class="inventory-v2__title">Inventory</span>
+          <div class="inventory-v2__search">
+            <label class="inventory-v2__search-label" for="inventory-v2-search">Search:</label>
+            <input type="text" class="inventory-v2__search-input" id="inventory-v2-search" autocomplete="off" spellcheck="false" />
+          </div>
+          <button type="button" class="bazaar__close" id="inventory-v2-close" aria-label="Close"></button>
+        </header>
+
+        <div class="inventory-v2__toolbar">
+          <button type="button" class="inventory-v2__tab-scroll inventory-v2__tab-scroll--left" id="inventory-v2-tabs-prev" aria-label="Scroll tabs left">&#9664;</button>
+          <div class="inventory-v2__tabs-viewport">
+            <nav class="inventory-v2__tabs" id="inventory-v2-tabs" aria-label="Inventory tabs"></nav>
+          </div>
+          <button type="button" class="inventory-v2__tab-scroll inventory-v2__tab-scroll--right" id="inventory-v2-tabs-next" aria-label="Scroll tabs right">&#9654;</button>
+        </div>
+
+        <div class="inventory-v2__body">
+          <div class="inventory-v2__grid-scroll">
+            <div class="inventory-v2__grid" id="inventory-v2-grid" aria-label="Inventory slots"></div>
+          </div>
+        </div>
+
+        <footer class="inventory-v2__footer">
+          <div class="bazaar__gold inventory-v2__gold">
+            <span class="bazaar__gold-prefix" aria-hidden="true">G</span>
+            <input type="text" class="bazaar__gold-input" id="inventory-v2-gold" readonly value="" />
+          </div>
+          <button type="button" class="inventory-v2__action inventory-v2__action--list" id="inventory-v2-list-btn" aria-label="Sort inventory" title="Sort">
+            <svg class="inventory-v2__icon inventory-v2__icon--list" viewBox="0 0 14 14" aria-hidden="true">
+              <circle cx="2.5" cy="3.5" r="1.2" fill="currentColor" />
+              <rect x="5" y="2.8" width="8" height="1.4" rx="0.4" fill="currentColor" />
+              <circle cx="2.5" cy="7" r="1.2" fill="currentColor" />
+              <rect x="5" y="6.3" width="8" height="1.4" rx="0.4" fill="currentColor" />
+              <circle cx="2.5" cy="10.5" r="1.2" fill="currentColor" />
+              <rect x="5" y="9.8" width="8" height="1.4" rx="0.4" fill="currentColor" />
+            </svg>
+          </button>
+          <button type="button" class="inventory-v2__action inventory-v2__action--trash" id="inventory-v2-discard" aria-label="Discard" title="Discard">
+            <svg class="inventory-v2__icon inventory-v2__icon--trash" viewBox="0 0 12 14" aria-hidden="true">
+              <path fill="currentColor" d="M2.2 4.5h7.6l-.7 8.2c0 .6-.5 1.1-1.1 1.1H4c-.6 0-1.1-.5-1.1-1.1L2.2 4.5zm1.8-2.4h3c.5 0 .9.4.9.9v.6H3.1V3c0-.5.4-.9.9-.9zM1 3.6h10v1.2H1V3.6z" />
+            </svg>
+          </button>
+        </footer>
+      </div>
+    </div>
+
+    <div class="inventory-layer replaceable-window-layer" id="inventory-layer" data-replaceable="inventory" hidden>
       <div class="inventory inventory--floating bazaar" id="inventory-root" role="dialog" aria-label="Inventory">
         <header class="bazaar__titlebar inventory__titlebar" id="inventory-titlebar">
           <span class="bazaar__title">Inventory</span>
@@ -491,11 +560,14 @@
   <script src="/static/js/item-icons.js"></script>
   <script src="/static/js/character-view.js"></script>
   <script src="/static/js/main-bgm.js"></script>
+  <script src="/static/js/replaceable-windows.js"></script>
   <script src="/static/js/app.js"></script>
   <script src="/static/js/session-flow.js"></script>
   <script src="/static/js/chat.js"></script>
   <script src="/static/js/window-focus.js"></script>
   <script src="/static/js/inventory.js"></script>
+  <script src="/static/js/inventory-v2.js"></script>
+  <script src="/static/js/inventory-router.js"></script>
   <script src="/static/js/game-config.js"></script>
   <script src="/static/js/main.js"></script>
 </body>

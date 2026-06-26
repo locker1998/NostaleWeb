@@ -1052,7 +1052,7 @@ def fetch_skills(conn: sqlite3.Connection) -> list[dict]:
 def fetch_preferences(conn: sqlite3.Connection, character_id: int) -> dict:
     row = conn.execute(
         """
-        SELECT skill_page, skill_slots_locked, skill_alt_hotkeys
+        SELECT skill_page, skill_slots_locked, skill_alt_hotkeys, new_bazaar_inventory
         FROM characters
         WHERE id = ? AND COALESCE(IsDeleted, 0) = 0
         """,
@@ -1065,6 +1065,7 @@ def fetch_preferences(conn: sqlite3.Connection, character_id: int) -> dict:
         "skillPage": int(row["skill_page"]),
         "skillSlotsLocked": bool(row["skill_slots_locked"]),
         "skillAltHotkeys": bool(row["skill_alt_hotkeys"]),
+        "newBazaarInventory": bool(row["new_bazaar_inventory"]),
     }
 
 
@@ -1075,15 +1076,16 @@ def update_preferences(character_id: int, payload: dict) -> dict:
 
     skill_slots_locked = 1 if payload.get("skillSlotsLocked") else 0
     skill_alt_hotkeys = 1 if payload.get("skillAltHotkeys") else 0
+    new_bazaar_inventory = 1 if payload.get("newBazaarInventory", True) else 0
 
     with get_connection() as conn:
         updated = conn.execute(
             """
             UPDATE characters
-            SET skill_page = ?, skill_slots_locked = ?, skill_alt_hotkeys = ?
+            SET skill_page = ?, skill_slots_locked = ?, skill_alt_hotkeys = ?, new_bazaar_inventory = ?
             WHERE id = ?
             """,
-            (skill_page, skill_slots_locked, skill_alt_hotkeys, character_id),
+            (skill_page, skill_slots_locked, skill_alt_hotkeys, new_bazaar_inventory, character_id),
         ).rowcount
         if updated == 0:
             raise ValueError("Character not found")
@@ -3867,6 +3869,10 @@ def migrate_database() -> None:
             conn.execute(
                 "UPDATE characters SET hair_colour = hair_colour + 1 "
                 "WHERE hair_colour BETWEEN 0 AND 9"
+            )
+        if "new_bazaar_inventory" not in character_columns:
+            conn.execute(
+                "ALTER TABLE characters ADD COLUMN new_bazaar_inventory INTEGER NOT NULL DEFAULT 1"
             )
         migrate_character_slot_limit(conn)
         from bazaar_sell import migrate_merchant_medals_table
