@@ -35,6 +35,7 @@ MERCHANT_MEDAL_VNUMS: dict[int, int] = {
 
 MAX_UNIT_PRICE_WITHOUT_MEDAL = 2_000_000
 MAX_UNIT_PRICE_WITH_MEDAL = 2_000_000_000
+CHANGE_PRICE_FEE = 20_000
 
 
 def is_merchant_medal_vnum(item_vnum: int) -> bool:
@@ -628,6 +629,85 @@ def receive_bazaar_listing(
         "saleFee": sale_fee,
         "receivedQuantity": sold_qty,
         "totalAmount": net_gold,
+        "name": row["item_name"],
+    }
+
+
+def change_bazaar_listing_price(
+    conn: sqlite3.Connection,
+    character_id: int,
+    listing_id: int,
+    unit_price: int,
+) -> dict[str, Any]:
+    unit_price = int(unit_price)
+    if unit_price < 1:
+        raise ValueError("Invalid price.")
+
+    row = conn.execute(
+        """
+        SELECT
+          b.id,
+          b.character_id,
+          b.price AS current_price,
+          COALESCE(b.listed_quantity, ii.Quantity) AS listed_quantity,
+          ii.Quantity AS quantity,
+          i.name AS item_name
+        FROM bazaar b
+        JOIN item_instances ii ON b.item_instance_id = ii.id
+        JOIN items i ON ii.ItemVNum = i.ItemVNum
+        WHERE b.id = ?
+        """,
+        (listing_id,),
+    ).fetchone()
+    if row is None:
+        raise ValueError("Listing not found.")
+    if int(row["character_id"]) != int(character_id):
+        raise ValueError("Listing not found.")
+
+    listed_qty = int(row["listed_quantity"])
+    current_qty = int(row["quantity"])
+    if current_qty <= 0:
+        raise ValueError("Listing is no longer active.")
+    if listed_qty != current_qty:
+        raise ValueError("Collect sold items before changing the price.")
+
+    current_price = int(row["current_price"])
+    if unit_price == current_price:
+        raise ValueError("Price is unchanged.")
+
+    has_medal = get_active_merchant_medal(conn, character_id) is not None
+    max_price = max_unit_price(has_medal)
+    if unit_price > max_price:
+        raise ValueError(f"Price cannot exceed {max_price:,} gold per unit.")
+
+    character = conn.execute(
+        "SELECT gold FROM characters WHERE id = ? AND COALESCE(IsDeleted, 0) = 0",
+        (character_id,),
+    ).fetchone()
+    if character is None:
+        raise ValueError("Character not found.")
+
+    gold = int(character["gold"])
+    change_fee = CHANGE_PRICE_FEE
+    if gold < change_fee:
+        raise ValueError("Not enough gold to pay the change price fee.")
+
+    conn.execute(
+        "UPDATE bazaar SET price = ? WHERE id = ?",
+        (unit_price, listing_id),
+    )
+    new_gold = gold - change_fee
+    if change_fee:
+        conn.execute(
+            "UPDATE characters SET gold = ? WHERE id = ?",
+            (new_gold, character_id),
+        )
+
+    return {
+        "listingId": listing_id,
+        "price": unit_price,
+        "gold": new_gold,
+        "changePriceFee": change_fee,
         "name": row["item_name"],
     }
 

@@ -363,7 +363,7 @@ function renderAdminRows() {
       changeBtn.textContent = "Change";
       changeBtn.addEventListener("click", (event) => {
         event.stopPropagation();
-        showToast("Price change coming soon.");
+        openChangePriceDialog(item, event);
       });
       actions.appendChild(changeBtn);
 
@@ -797,16 +797,14 @@ function mountBuyDialog({
   hint,
   actions,
   itemDisplay = "icon",
+  hideTitle = false,
+  showItem = true,
+  showDetails = true,
 }) {
   const mount = getBuyConfirmMount();
   if (!mount) return null;
 
   closeBuyDialog();
-
-  const itemRow = itemDisplay === "name" ? buildConfirmNameOnly(item) : buildConfirmItemRow(item);
-  const details = detailRows
-    ? buildConfirmDetails(detailRows)
-    : buildBuyDialogDetails(item, quantity).details;
 
   const layer = document.createElement("div");
   layer.className = "bazaar__buy-confirm-layer";
@@ -814,12 +812,32 @@ function mountBuyDialog({
 
   const dialog = document.createElement("div");
   dialog.className = "bazaar__buy-confirm";
+  if (hideTitle && !showItem && !showDetails) {
+    dialog.classList.add("bazaar__buy-confirm--minimal");
+  }
   dialog.setAttribute("role", "dialog");
   dialog.setAttribute("aria-label", ariaLabel);
 
-  const titleEl = document.createElement("h2");
-  titleEl.className = "bazaar__buy-confirm-title";
-  titleEl.textContent = title;
+  const children = [];
+
+  if (!hideTitle) {
+    const titleEl = document.createElement("h2");
+    titleEl.className = "bazaar__buy-confirm-title";
+    titleEl.textContent = title;
+    children.push(titleEl);
+  }
+
+  if (showItem && item) {
+    const itemRow = itemDisplay === "name" ? buildConfirmNameOnly(item) : buildConfirmItemRow(item);
+    children.push(itemRow);
+  }
+
+  if (showDetails && item) {
+    const details = detailRows
+      ? buildConfirmDetails(detailRows)
+      : buildBuyDialogDetails(item, quantity).details;
+    children.push(details);
+  }
 
   const hintEl = document.createElement("p");
   hintEl.className = "bazaar__buy-confirm-prompt";
@@ -834,7 +852,8 @@ function mountBuyDialog({
     actionsEl.appendChild(button);
   }
 
-  dialog.append(titleEl, itemRow, details, hintEl, actionsEl);
+  children.push(hintEl, actionsEl);
+  dialog.append(...children);
   layer.appendChild(dialog);
   mount.appendChild(layer);
   window.bringDialogLayerToFront?.(layer);
@@ -1297,6 +1316,115 @@ function openQuantityDialog({
   setTimeout(bindQuantityOutsideClose, 0);
 }
 
+function openChangePriceDialog(item, event) {
+  const unitPrice = Math.max(1, Number(item.price) || 1);
+
+  openQuantityDialog({
+    useBodyOverlay: true,
+    clientX: event.clientX,
+    clientY: event.clientY,
+    title: "Change",
+    ariaLabel: "Change listing price",
+    getSummaryText: () => "Change the prices of the items you are offering.",
+    maxQuantity: maxSellUnitPrice(),
+    minQuantity: 1,
+    defaultQuantity: unitPrice,
+    onConfirm: (price) => {
+      const nextPrice = Math.max(1, Number(price) || 1);
+      if (nextPrice > maxSellUnitPrice()) {
+        showToast(`Price cannot exceed ${formatGold(maxSellUnitPrice())} gold per unit.`);
+        return;
+      }
+      if (nextPrice === unitPrice) {
+        showToast("Price is unchanged.");
+        return;
+      }
+      openChangePriceConfirmDialog(item, nextPrice);
+    },
+  });
+}
+
+function openChangePriceConfirmDialog(item, newPrice) {
+  const confirmBtn = document.createElement("button");
+  confirmBtn.type = "button";
+  confirmBtn.className = "bazaar__btn bazaar__btn--buy";
+  confirmBtn.textContent = "Confirm";
+
+  const cancelBtn = document.createElement("button");
+  cancelBtn.type = "button";
+  cancelBtn.className = "bazaar__btn bazaar__btn--buy";
+  cancelBtn.textContent = "Cancel";
+
+  mountBuyDialog({
+    hideTitle: true,
+    showItem: false,
+    showDetails: false,
+    ariaLabel: "Change item price confirmation",
+    item,
+    hint: `Do you want to change the item price? It will cost ${formatGold(CHANGE_PRICE_FEE)} gold.`,
+    actions: [confirmBtn, cancelBtn],
+  });
+
+  confirmBtn.addEventListener("click", () => {
+    if (goldBalance < CHANGE_PRICE_FEE) {
+      closeBuyDialog();
+      showBazaarInfoDialog("Not enough gold.");
+      return;
+    }
+    closeBuyDialog();
+    void executeChangeListingPrice(item, newPrice);
+  });
+
+  cancelBtn.addEventListener("click", () => {
+    closeBuyDialog();
+  });
+}
+
+async function executeChangeListingPrice(item, newPrice) {
+  const unitPrice = Math.max(1, Number(newPrice) || 1);
+  if (unitPrice > maxSellUnitPrice()) {
+    showToast(`Price cannot exceed ${formatGold(maxSellUnitPrice())} gold per unit.`);
+    return;
+  }
+
+  try {
+    const response = await fetch(`/api/bazaar/change-price/${item.id}`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ unitPrice }),
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      const errorText = String(result.error || "");
+      if (errorText.toLowerCase().includes("not enough gold")) {
+        showBazaarInfoDialog("Not enough gold.");
+        return;
+      }
+      showToast(errorText || "Failed to change listing price.");
+      return;
+    }
+
+    if (result.gold != null) {
+      setGold(result.gold);
+    }
+    if (Array.isArray(result.listings)) {
+      allAdminListings = result.listings.map((entry) => ({ ...entry }));
+      applyAdminFilters();
+    } else {
+      void loadAdminListings();
+    }
+    if (Array.isArray(result.marketListings)) {
+      allListings = result.marketListings.map((entry) => ({ ...entry }));
+      if (activeBazaarTab === "buy") {
+        applyFilters();
+      }
+    }
+  } catch (err) {
+    showToast(`Failed to change listing price: ${err.message}`);
+  }
+}
+
 window.NosQuantityDialog = {
   open: openQuantityDialog,
   close: closeQuantityDialog,
@@ -1635,6 +1763,7 @@ async function executeCreateListing() {
 
 const SELL_MAX_UNIT_PRICE_DEFAULT = 2_000_000;
 const SELL_MAX_UNIT_PRICE_MEDAL = 2_000_000_000;
+const CHANGE_PRICE_FEE = 20_000;
 
 function hasMerchantMedal() {
   return merchantMedal != null;

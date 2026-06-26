@@ -3514,6 +3514,44 @@ class BazaarHandler(SimpleHTTPRequestHandler):
             except sqlite3.Error as exc:
                 return self._json_response({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
 
+        if path.startswith("/api/bazaar/change-price/"):
+            state = self._session_state()
+            if not self._session_ready_for_game():
+                return self._json_response({"error": "Unauthorized"}, status=HTTPStatus.UNAUTHORIZED)
+
+            listing_id = path.rsplit("/", 1)[-1]
+            try:
+                from bazaar_sell import change_bazaar_listing_price
+
+                payload = self._read_json()
+                unit_price = int(payload.get("unitPrice"))
+                with get_connection() as conn:
+                    result = change_bazaar_listing_price(
+                        conn,
+                        state.character_id,
+                        int(listing_id),
+                        unit_price,
+                    )
+                    admin_listings = fetch_my_listings(conn, state.character_id)
+                    market_listings = fetch_listings(conn)
+                return self._json_response(
+                    {
+                        "ok": True,
+                        "listingId": result["listingId"],
+                        "price": result["price"],
+                        "gold": result["gold"],
+                        "changePriceFee": result["changePriceFee"],
+                        "listings": admin_listings,
+                        "marketListings": market_listings,
+                    }
+                )
+            except (TypeError, ValueError) as exc:
+                return self._json_response({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            except sqlite3.Error as exc:
+                return self._json_response({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            except json.JSONDecodeError:
+                return self._json_response({"error": "Invalid JSON"}, status=HTTPStatus.BAD_REQUEST)
+
         if path == "/api/inventory/use-merchant-medal":
             state = self._session_state()
             if not self._session_ready_for_game():

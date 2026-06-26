@@ -3125,6 +3125,10 @@ body.play .scene--server-select > .server-select__leave {
   text-shadow: var(--nt-txt-shadow);
 }
 
+.bazaar__buy-confirm--minimal .bazaar__buy-confirm-prompt {
+  margin-top: 0;
+}
+
 .bazaar__buy-confirm-actions {
   display: flex;
   justify-content: center;
