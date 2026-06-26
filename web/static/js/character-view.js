@@ -31,6 +31,17 @@ const NOSAPKI_CONTENT_CENTER_Y = 245.5;
 const NOSAPKI_CONTENT_PADDING = 1.15;
 const DEFAULT_PREVIEW_ZOOM = 0.6;
 
+const PREVIEW_PROFILES = {
+  default: { previewZoom: DEFAULT_PREVIEW_ZOOM },
+  createCharacter: { previewZoom: DEFAULT_PREVIEW_ZOOM },
+  main: { previewZoom: DEFAULT_PREVIEW_ZOOM },
+  selectSlot: { previewZoom: 0.92 },
+};
+
+function previewProfile(profileName) {
+  return PREVIEW_PROFILES[profileName] || PREVIEW_PROFILES.default;
+}
+
 function hairRecolorHex(colourId) {
   const key = String(colourId);
   return HAIR_RECOLOR_HEX[key] || HAIR_RECOLOR_HEX[1];
@@ -210,11 +221,35 @@ function destroy(view) {
   view.observer?.disconnect();
 }
 
+function render(stageEl, config, { profile = "default", build = false, view = null } = {}) {
+  const profileOpts = previewProfile(profile);
+  let activeView = view;
+
+  if (!activeView) {
+    activeView = mount(stageEl, {
+      previewZoom: profileOpts.previewZoom,
+      build,
+    });
+  } else if (profileOpts.previewZoom !== activeView.previewZoom) {
+    activeView.previewZoom = profileOpts.previewZoom;
+    layout(activeView);
+  }
+
+  if (activeView && config) {
+    update(activeView, config);
+  }
+
+  return activeView;
+}
+
 window.CharacterView = {
   DEFAULT_PREVIEW_ZOOM,
+  PREVIEW_PROFILES,
   HAIR_RECOLOR_HEX,
   JOB_CLASS,
   mount,
+  render,
+  previewProfile,
   update,
   layout,
   destroy,

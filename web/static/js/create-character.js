@@ -8,7 +8,6 @@ let jobNameEl = null;
 let jobLine1El = null;
 let jobLine2El = null;
 let nameInput = null;
-let errorEl = null;
 let hairColoursEl = null;
 let hairStyleCardEl = null;
 let cancelBtn = null;
@@ -171,16 +170,12 @@ function getSlotFromQuery() {
 }
 
 function showError(message) {
-  if (!errorEl) {
-    return;
-  }
   if (!message) {
-    errorEl.hidden = true;
-    errorEl.textContent = "";
+    window.PlayDialog?.hideAlert?.();
     return;
   }
-  errorEl.hidden = false;
-  errorEl.textContent = message;
+
+  window.PlayDialog?.showAlert?.(message);
 }
 
 function setFormEnabled(enabled) {
@@ -600,6 +595,38 @@ async function loadOptions() {
   renderJobChoices(createOptions.jobs);
 }
 
+function defaultJobChoices() {
+  return JOB_DISPLAY_ORDER.map((id) => ({
+    id,
+    label: JOB_LABELS[id] || id,
+    unlocked: id !== "MartialArtist",
+    startLevel: 1,
+    startJobLevel: 1,
+  }));
+}
+
+function renderDefaultCharacterChoices() {
+  renderGenderChoices(GENDER_DISPLAY_ORDER);
+  renderHairChoices(["A", "B"]);
+  renderHairColours();
+  renderJobChoices(defaultJobChoices());
+}
+
+function preloadCreateCharacterTiles() {
+  const indices = new Set();
+  for (const group of [JOB_TILES, GENDER_TILES, HAIR_TILES]) {
+    for (const tiles of Object.values(group)) {
+      for (const index of Object.values(tiles)) {
+        indices.add(index);
+      }
+    }
+  }
+  for (const index of indices) {
+    const img = new Image();
+    img.src = tileUrl(index);
+  }
+}
+
 function bindPageElements() {
   sceneEl = document.getElementById("create-character-scene");
   formEl = document.getElementById("create-character-form");
@@ -611,17 +638,18 @@ function bindPageElements() {
   jobLine1El = document.getElementById("create-character-job-line-1");
   jobLine2El = document.getElementById("create-character-job-line-2");
   nameInput = document.getElementById("create-character-name");
-  errorEl = document.getElementById("create-character-error");
   hairColoursEl = document.getElementById("create-character-hair-colours");
   hairStyleCardEl = document.getElementById("create-character-hair-style-card");
   cancelBtn = document.getElementById("create-character-cancel-btn");
   submitBtn = document.getElementById("create-character-submit-btn");
 
   const previewStageEl = document.querySelector(".create-character__preview-stage");
-  if (window.CharacterView?.mount) {
-    characterPreviewView = window.CharacterView.mount(previewStageEl, {
-      previewZoom: window.CharacterView.DEFAULT_PREVIEW_ZOOM,
-    });
+  if (window.CharacterView?.render) {
+    characterPreviewView = window.CharacterView.render(
+      previewStageEl,
+      null,
+      { profile: "createCharacter" },
+    );
   }
 }
 
@@ -632,25 +660,8 @@ function wireFormHandlers() {
 
   formWired = true;
 
-  submitBtn?.addEventListener(
-    "pointerdown",
-    () => {
-      window.UiSound?.playClickSound?.();
-    },
-    { passive: true },
-  );
-
-  cancelBtn?.addEventListener(
-    "pointerdown",
-    () => {
-      window.UiSound?.playClickSound?.();
-    },
-    { passive: true },
-  );
-
   formEl.addEventListener("submit", async (event) => {
     event.preventDefault();
-    window.UiSound?.playClickSound?.();
     showError("");
 
     const name = nameInput.value.trim();
@@ -705,10 +716,7 @@ function wireFormHandlers() {
     if (actionInProgress) {
       return;
     }
-    window.UiSound?.playClickSound?.();
-    window.setTimeout(() => {
-      void window.ScreenTransition.navigateInstant("/play/select-character");
-    }, 80);
+    void window.ScreenTransition.navigateInstant("/play/select-character");
   });
 }
 
@@ -728,16 +736,20 @@ async function bootCreateCharacterPage() {
   pageBooted = true;
   bindPageElements();
   wireFormHandlers();
+  renderDefaultCharacterChoices();
   updatePreviewBackground();
   updateJobDescription();
-  renderHairColours();
   updateHairStyleCardVisibility();
+  preloadCreateCharacterTiles();
 
+  const optionsPromise = loadOptions();
   const status = await window.SessionFlow.redirectForSessionStatus("character");
-  if (status.step === "character") {
-    window.SessionFlow.startChannelEjectWatch();
-    await loadOptions();
+  if (status.step !== "character") {
+    return;
   }
+
+  window.SessionFlow.startChannelEjectWatch();
+  await optionsPromise;
 }
 
 window.addEventListener("pageshow", (event) => {

@@ -14,7 +14,7 @@
   <div class="scene scene--main">
     <div class="main-character-view" id="main-character-view" aria-hidden="true">
       <div class="main-character-view__sprite character-view-stage" id="main-character-view-sprite"></div>
-      <div class="main-character-view__name" id="main-character-name" hidden></div>
+      <div class="character-view__name" id="main-character-name" hidden></div>
     </div>
 
     <div class="server-clock" id="server-clock" aria-label="Server time and channel">
@@ -117,7 +117,8 @@
 
         <div class="bazaar__frame">
           <div class="bazaar__tab-body">
-            <div class="bazaar__tab-panel bazaar__tab-panel--active" data-tab="buy">
+            <div class="bazaar__tab-panels">
+              <div class="bazaar__tab-panel bazaar__tab-panel--active" data-tab="buy">
               <section class="bazaar__filters">
                 <span class="bazaar__label bazaar__filters__criteria-label">Search criteria</span>
 
@@ -179,37 +180,162 @@
                   </table>
                 </div>
               </div>
-
-              <footer class="bazaar__footer">
-                <div class="bazaar__pager">
-                  <div class="bazaar__pager-left">
-                    <button type="button" class="bazaar__pager-arrow bazaar__pager-arrow--first" data-page="first" title="First" aria-label="First page"></button>
-                    <button type="button" class="bazaar__pager-arrow bazaar__pager-arrow--prev" data-page="prev" title="Previous" aria-label="Previous page"></button>
-                  </div>
-                  <div class="bazaar__pager-pages" id="page-numbers"></div>
-                  <div class="bazaar__pager-right">
-                    <button type="button" class="bazaar__pager-arrow bazaar__pager-arrow--next" data-page="next" title="Next" aria-label="Next page"></button>
-                    <button type="button" class="bazaar__pager-arrow bazaar__pager-arrow--last" data-page="last" title="Last" aria-label="Last page"></button>
-                  </div>
-                  <input type="text" class="bazaar__pager-input" id="page-jump" value="1" />
-                </div>
-
-                <button type="button" class="bazaar__btn bazaar__btn--go" id="page-go" aria-label="Go"></button>
-
-                <div class="bazaar__gold">
-                  <span class="bazaar__gold-prefix" aria-hidden="true">G</span>
-                  <input type="text" class="bazaar__gold-input" id="gold-balance" readonly value="" />
-                </div>
-              </footer>
             </div>
 
             <div class="bazaar__tab-panel" data-tab="list">
-              <p class="bazaar__tab-placeholder">List — coming soon</p>
+              <div class="bazaar__sell">
+                <div class="bazaar__sell-drop">
+                  <div class="bazaar__sell-panel">
+                    <div class="inventory__slot bazaar__sell-slot" id="sell-slot" aria-label="Listing slot"></div>
+                    <p class="bazaar__sell-drop-hint">Put the items you wish to list in the NosBazaar.</p>
+                  </div>
+
+                  <div class="bazaar__sell-body">
+                    <div class="bazaar__sell-fields">
+                      <div class="bazaar__sell-row">
+                        <span class="bazaar__sell-label">Quantity</span>
+                        <span class="bazaar__sell-value" id="sell-quantity">0 Piece</span>
+                      </div>
+                      <div class="bazaar__sell-row">
+                        <span class="bazaar__sell-label">Listing period</span>
+                        <select id="sell-period" class="bazaar__input bazaar__select bazaar__sell-select" aria-label="Listing period">
+                          <option value="1">1 Day(s)</option>
+                          <option value="7">7 Day(s)</option>
+                          <option value="15">15 Day(s)</option>
+                          <option value="30">30 Day(s)</option>
+                        </select>
+                      </div>
+                      <div class="bazaar__sell-row">
+                        <span class="bazaar__sell-label">Setting method</span>
+                        <select id="sell-method" class="bazaar__input bazaar__select bazaar__sell-select" aria-label="Setting method">
+                          <option value="individual" selected>Individual sale</option>
+                          <option value="bundle">Bundle sale</option>
+                        </select>
+                      </div>
+                      <div class="bazaar__sell-row">
+                        <span class="bazaar__sell-label">Price per unit</span>
+                        <div class="bazaar__sell-price">
+                          <input type="text" id="sell-price" class="bazaar__input bazaar__sell-price-input" inputmode="numeric" autocomplete="off" />
+                          <span class="bazaar__sell-price-suffix">Gold</span>
+                        </div>
+                      </div>
+                      <div class="bazaar__sell-row">
+                        <span class="bazaar__sell-label">Total price</span>
+                        <span class="bazaar__sell-value bazaar__sell-value--gold" id="sell-total">0 Gold</span>
+                      </div>
+                      <div class="bazaar__sell-row">
+                        <span class="bazaar__sell-label">Listing fee</span>
+                        <span class="bazaar__sell-value bazaar__sell-value--gold" id="sell-fee">50 Gold</span>
+                      </div>
+                    </div>
+
+                    <div class="bazaar__sell-actions">
+                      <button type="button" class="bazaar__btn bazaar__btn--list" id="sell-list-btn">List</button>
+                    </div>
+
+                    <p class="bazaar__sell-note">* Listed items are saved for a fixed period of time after the end of the sale time or sale expiry.<br>When the saving time has expired, the items will disappear, so take them out of the 'administration'.</p>
+                  </div>
+                </div>
+
+                <div class="bazaar__sell-fees-note">
+                  <p>* If you want to sell goods via the NosBazaar, you have to pay listing and sales fees.</p>
+                  <p>* If you list an item whilst using the NosMerchant Medal, the listing fee is reduced and the sale fee is dropped.<br>You can list more items for longer. You can find more information in the Game Guide.</p>
+                </div>
+
+                <div class="bazaar__sell-footer">
+                  <div class="bazaar__sell-medal" id="sell-medal" hidden>
+                    <div class="inventory__slot inventory__slot--display-only bazaar__sell-medal-slot" aria-hidden="true"></div>
+                    <div class="bazaar__sell-medal-text">
+                      <div class="bazaar__sell-medal-name"></div>
+                      <div class="bazaar__sell-medal-time"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div class="bazaar__tab-panel" data-tab="admin">
-              <p class="bazaar__tab-placeholder">Administration — coming soon</p>
+              <section class="bazaar__filters bazaar__filters--admin">
+                <span class="bazaar__label bazaar__filters__criteria-label">Search criteria</span>
+
+                <span class="bazaar__label bazaar__filters__label-status">Status</span>
+                <select id="admin-filter-status" class="bazaar__input bazaar__select bazaar__filters__status" aria-label="Status">
+                  <option value="all">All</option>
+                  <option value="on-sale">On sale</option>
+                  <option value="completed">Sale completed</option>
+                  <option value="expired">Deadline has expired</option>
+                </select>
+
+                <button type="button" class="bazaar__btn bazaar__btn--search" id="admin-search-btn">Search</button>
+
+                <div class="bazaar__filters__close-all-wrap">
+                  <p class="bazaar__filters__close-all-note">Close all sold/expired auctions.</p>
+                  <button type="button" class="bazaar__btn bazaar__btn--yellow bazaar__filters__close-all-btn" id="admin-close-all-btn">Close All</button>
+                </div>
+              </section>
+
+              <div class="bazaar__listing bazaar__listing--admin">
+                <div class="bazaar__list-header">
+                  <table class="bazaar__list-table">
+                    <colgroup>
+                      <col class="col-name" />
+                      <col class="col-amount" />
+                      <col class="col-price" />
+                      <col class="col-time" />
+                      <col class="col-status" />
+                      <col class="col-admin-actions" />
+                    </colgroup>
+                    <thead>
+                      <tr>
+                        <th class="col-name">Item name</th>
+                        <th class="col-amount">Amount / All</th>
+                        <th class="col-price">Price per unit</th>
+                        <th class="col-time">Time period</th>
+                        <th class="col-status">Status</th>
+                        <th class="col-admin-actions"></th>
+                      </tr>
+                    </thead>
+                  </table>
+                </div>
+
+                <div class="bazaar__list-body">
+                  <table class="bazaar__list-table">
+                    <colgroup>
+                      <col class="col-name" />
+                      <col class="col-amount" />
+                      <col class="col-price" />
+                      <col class="col-time" />
+                      <col class="col-status" />
+                      <col class="col-admin-actions" />
+                    </colgroup>
+                    <tbody id="admin-item-rows"></tbody>
+                  </table>
+                </div>
+              </div>
             </div>
+            </div>
+
+            <footer class="bazaar__footer" id="bazaar-footer">
+              <div class="bazaar__pager">
+                <div class="bazaar__pager-left">
+                  <button type="button" class="bazaar__pager-arrow bazaar__pager-arrow--first" data-page="first" title="First" aria-label="First page"></button>
+                  <button type="button" class="bazaar__pager-arrow bazaar__pager-arrow--prev" data-page="prev" title="Previous" aria-label="Previous page"></button>
+                </div>
+                <div class="bazaar__pager-pages" id="page-numbers"></div>
+                <div class="bazaar__pager-right">
+                  <button type="button" class="bazaar__pager-arrow bazaar__pager-arrow--next" data-page="next" title="Next" aria-label="Next page"></button>
+                  <button type="button" class="bazaar__pager-arrow bazaar__pager-arrow--last" data-page="last" title="Last" aria-label="Last page"></button>
+                </div>
+                <input type="text" class="bazaar__pager-input" id="page-jump" value="1" />
+              </div>
+
+              <button type="button" class="bazaar__btn bazaar__btn--go" id="page-go" aria-label="Go"></button>
+
+              <div class="bazaar__gold">
+                <span class="bazaar__gold-prefix" aria-hidden="true">G</span>
+                <input type="text" class="bazaar__gold-input" id="gold-balance" readonly value="" />
+              </div>
+            </footer>
           </div>
 
           <nav class="bazaar__tabs">

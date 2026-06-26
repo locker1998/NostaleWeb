@@ -19,7 +19,58 @@
     return;
   }
 
-  var root = document.documentElement;
-  root.classList.add("screen-transition--pending-in");
-  root.style.backgroundColor = "#000";
+  if (!document.getElementById("screen-transition-critical-css")) {
+    const style = document.createElement("style");
+    style.id = "screen-transition-critical-css";
+    style.textContent =
+      "html.screen-transition--pending-in,html.screen-transition--pending-in body{background-color:#000}" +
+      "html.screen-transition--pending-in body>:not(.screen-transition__overlay){visibility:hidden}";
+    document.head.appendChild(style);
+  }
+
+  document.documentElement.classList.add("screen-transition--pending-in");
+})();
+
+(function () {
+  function stylesheetRuleCount(sheet) {
+    try {
+      return sheet.cssRules.length;
+    } catch {
+      return -1;
+    }
+  }
+
+  function retryStylesheet(link) {
+    if (!link || link.dataset.retrying === "1") {
+      return;
+    }
+
+    link.dataset.retrying = "1";
+    const fresh = document.createElement("link");
+    fresh.rel = "stylesheet";
+    fresh.href = `${link.href.split("?")[0]}?retry=${Date.now()}`;
+    fresh.addEventListener("load", () => {
+      link.remove();
+    });
+    fresh.addEventListener("error", () => {
+      delete link.dataset.retrying;
+    });
+    link.parentNode?.insertBefore(fresh, link.nextSibling);
+  }
+
+  function repairStylesheets() {
+    document.querySelectorAll('link[rel="stylesheet"]').forEach((link) => {
+      const sheet = link.sheet;
+      if (!sheet || !link.href.includes("/static/css/")) {
+        return;
+      }
+      if (stylesheetRuleCount(sheet) === 0) {
+        retryStylesheet(link);
+      }
+    });
+  }
+
+  window.addEventListener("load", () => {
+    window.setTimeout(repairStylesheets, 0);
+  });
 })();

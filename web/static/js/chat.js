@@ -7,28 +7,54 @@ const scrollDownBtn = document.getElementById("chat-scroll-down");
 const scrollEndBtn = document.getElementById("chat-scroll-end");
 
 let activeTab = "all";
-let playerName = "";
+let chatPlayerName = "";
 let playerChannel = 1;
 let playerIsGm = false;
 let messages = [];
 let lastMessageId = 0;
 let pollTimer = null;
-let chatOpen = false;
 let outsideClickHandler = null;
 
 function isChatOpen() {
-  return chatOpen;
+  return Boolean(chatboxEl?.classList.contains("chatbox--open"));
+}
+
+function isEnterKey(event) {
+  return event.key === "Enter" || event.code === "NumpadEnter";
 }
 
 function isTypingTarget(target) {
   if (!(target instanceof HTMLElement)) {
     return false;
   }
-  const tag = target.tagName;
-  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
+
+  if (target.closest(".chatbox__composer") && !isChatOpen()) {
+    return false;
+  }
+
+  if (target.id === "chat-input" && isChatOpen()) {
     return true;
   }
-  return target.isContentEditable;
+
+  const tag = target.tagName;
+  if (tag === "TEXTAREA" || target.isContentEditable) {
+    return true;
+  }
+  if (tag === "INPUT") {
+    const input = target;
+    if (input.readOnly || input.disabled) {
+      return false;
+    }
+    return true;
+  }
+  if (tag === "SELECT") {
+    const select = target;
+    if (select.disabled || select.classList.contains("bazaar__select--native")) {
+      return false;
+    }
+    return true;
+  }
+  return false;
 }
 
 function messageVisible(message) {
@@ -131,7 +157,7 @@ function setPlayerChannel(channelNumber) {
 }
 
 function setPlayerName(name) {
-  playerName = name;
+  chatPlayerName = name;
 }
 
 function setPlayerIsGm(value) {
@@ -211,26 +237,26 @@ function parseOutgoingChat(raw) {
 }
 
 function isServerMessageForPlayer(message) {
-  if (!playerName) {
+  if (!chatPlayerName) {
     return true;
   }
 
   if (message.kind === "whisper") {
     if (message.direction === "outgoing") {
-      return message.playerName === playerName;
+      return message.playerName === chatPlayerName;
     }
     if (message.direction === "incoming") {
-      return message.recipientName === playerName;
+      return message.recipientName === chatPlayerName;
     }
     return false;
   }
 
   if (message.kind === "whisper-error" || message.kind === "command") {
-    return message.recipientName === playerName;
+    return message.recipientName === chatPlayerName;
   }
 
   if (message.kind === "app" && message.recipientName) {
-    return message.recipientName === playerName;
+    return message.recipientName === chatPlayerName;
   }
 
   return true;
@@ -267,10 +293,14 @@ function ingestServerMessage(message) {
   if (shouldRefreshInventory(message)) {
     void window.NosInventory?.reload?.();
   }
+
+  if (message.goldChanged && message.gold != null) {
+    window.NosBazaar?.setGold?.(message.gold);
+  }
 }
 
 async function pollChat() {
-  if (!playerName) {
+  if (!chatPlayerName) {
     return;
   }
 
@@ -296,7 +326,7 @@ async function pollChat() {
 }
 
 async function initializeChatCursor() {
-  if (!playerName) {
+  if (!chatPlayerName) {
     return;
   }
 
@@ -342,7 +372,7 @@ function stopChatPolling() {
 
 async function sendChatMessage(raw) {
   const parsed = parseOutgoingChat(raw);
-  if (!parsed || !playerName) {
+  if (!parsed || !chatPlayerName) {
     return;
   }
 
@@ -573,7 +603,6 @@ function scrollChatBy(delta) {
 function openChatbox() {
   if (!chatboxEl || isChatOpen()) return;
 
-  chatOpen = true;
   chatboxEl.classList.remove("chatbox--closed");
   chatboxEl.classList.add("chatbox--open");
   renderChatLog();
@@ -591,17 +620,22 @@ function openChatbox() {
   document.addEventListener("mousedown", outsideClickHandler);
 
   requestAnimationFrame(() => {
-    chatInputEl?.focus();
+    if (chatInputEl) {
+      chatInputEl.tabIndex = 0;
+      chatInputEl.focus();
+    }
   });
 }
 
 function closeChatbox() {
   if (!chatboxEl || !isChatOpen()) return;
 
-  chatOpen = false;
   chatboxEl.classList.add("chatbox--closed");
   chatboxEl.classList.remove("chatbox--open");
-  chatInputEl?.blur();
+  if (chatInputEl) {
+    chatInputEl.blur();
+    chatInputEl.tabIndex = -1;
+  }
   renderChatLog();
 
   if (outsideClickHandler) {
@@ -620,7 +654,7 @@ function appendChatMessage(text, channel = "general") {
 }
 
 function onDocumentKeyDown(event) {
-  if (event.key !== "Enter" || event.shiftKey || event.repeat) {
+  if (!isEnterKey(event) || event.shiftKey || event.repeat) {
     return;
   }
 
@@ -637,7 +671,11 @@ function onDocumentKeyDown(event) {
 }
 
 function initChat() {
-  if (!chatLogEl) return;
+  if (!chatboxEl || !chatLogEl) return;
+
+  if (chatInputEl) {
+    chatInputEl.tabIndex = -1;
+  }
 
   chatTabs.forEach((button) => {
     button.addEventListener("click", () => {
@@ -675,13 +713,17 @@ function initChat() {
     chatInputEl.value = "";
   });
 
-  document.addEventListener("keydown", onDocumentKeyDown);
+  window.addEventListener("keydown", onDocumentKeyDown, true);
   renderChatLog({ scrollToEnd: true });
 
   window.addEventListener("beforeunload", stopChatPolling);
 }
 
-initChat();
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initChat);
+} else {
+  initChat();
+}
 
 window.ChatUI = {
   appendMessage: appendChatMessage,
@@ -703,7 +745,7 @@ window.ChatUI = {
   formatGeneralMessage,
   formatWhisperChannelNotice,
   setPlayerName,
-  getPlayerName: () => playerName,
+  getPlayerName: () => chatPlayerName,
   setPlayerIsGm,
   getPlayerIsGm: () => playerIsGm,
   setPlayerChannel,

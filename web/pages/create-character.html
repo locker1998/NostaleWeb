@@ -6,7 +6,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Create Character</title>
   <link rel="stylesheet" href="/static/css/screen-transition.css" />
-  <link rel="stylesheet" href="/static/css/bazaar.css" />
+  <link rel="stylesheet" href="/static/css/play-critical.css" />
+  <link rel="stylesheet" href="/static/css/bazaar.css" media="print" onload="this.media='all'" />
+  <noscript><link rel="stylesheet" href="/static/css/bazaar.css" /></noscript>
   <script src="/static/js/screen-transition.js"></script>
 </head>
 <body class="play">
@@ -119,8 +121,6 @@
                   />
                 </footer>
               </div>
-
-              <p class="create-character__error" id="create-character-error" hidden></p>
 
               <div class="create-character__actions">
                 <button type="submit" class="create-character__btn create-character__btn--create" id="create-character-submit-btn">Create</button>

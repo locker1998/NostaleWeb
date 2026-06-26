@@ -3,6 +3,10 @@ html.screen-transition--pending-in body {
   background-color: #000;
 }
 
+html.screen-transition--pending-in body > :not(.screen-transition__overlay) {
+  visibility: hidden;
+}
+
 .screen-transition__overlay {
   position: fixed;
   inset: 0;

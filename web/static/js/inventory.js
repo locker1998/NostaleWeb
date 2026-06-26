@@ -10,8 +10,9 @@
     costume: { columns: 5, rows: 12, unlockedRows: 12 },
   };
 
-  const layerEl = document.getElementById("inventory-layer");
+  const MERCHANT_MEDAL_VNUMS = new Set([5060, 5061, 5062, 9066, 9067, 9068]);
   const rootEl = document.getElementById("inventory-root");
+  const layerEl = document.getElementById("inventory-layer");
   const closeBtn = document.getElementById("inventory-close");
   const gridEl = document.getElementById("inventory-grid");
   const goldEl = document.getElementById("inventory-gold");
@@ -70,6 +71,7 @@
   let itemDragState = null;
   let dragGhostEl = null;
   let dropHighlightEl = null;
+  let sellSlotDropHighlight = null;
 
   function defaultPocketForItem(item) {
     const inventoryType = Number(item?.inventoryType ?? 0);
@@ -137,10 +139,52 @@
     return payload;
   }
 
+  async function useMerchantMedal(instanceId) {
+    const response = await fetch("/api/inventory/use-merchant-medal", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ instanceId }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload.error || "Could not use NosMerchant Medal.");
+    }
+    applyInventoryPayload(payload);
+    if (payload.merchantMedal) {
+      window.NosBazaar?.setMerchantMedal?.(payload.merchantMedal);
+    }
+    return payload;
+  }
+
+  async function splitInventoryItem(instanceId, pocket, slot, amount) {
+    const response = await fetch("/api/inventory/split", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ instanceId, pocket, slot, amount }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload.error || "Could not split item.");
+    }
+    applyInventoryPayload(payload);
+    return payload;
+  }
+
   function clearDropHighlight() {
     dropHighlightEl?.classList.remove("inventory__slot--drop-target");
     dropHighlightEl = null;
+    sellSlotDropHighlight?.classList.remove("bazaar__sell-slot--drop-target");
+    sellSlotDropHighlight = null;
     discardBtn?.classList.remove("inventory__discard-btn--drop-target");
+  }
+
+  function isSellSlotDropActive() {
+    const panel = document.querySelector('.bazaar__tab-panel[data-tab="list"]');
+    if (!panel?.classList.contains("bazaar__tab-panel--active")) return false;
+    const layer = document.getElementById("bazaar-layer");
+    return Boolean(layer && !layer.hidden);
   }
 
   function removeDragGhost() {
@@ -153,17 +197,39 @@
     clearDropHighlight();
     removeDragGhost();
     itemDragState = null;
+    rootEl?.classList.remove("inventory--item-dragging");
     document.removeEventListener("mousemove", onItemDragMove);
     document.removeEventListener("mouseup", onItemDragEnd);
   }
 
   function elementUnderDragPoint(x, y) {
-    removeDragGhost();
-    const target = document.elementFromPoint(x, y);
-    if (dragGhostEl) {
-      document.body.appendChild(dragGhostEl);
+    if (!dragGhostEl) {
+      return document.elementFromPoint(x, y);
     }
+
+    dragGhostEl.style.visibility = "hidden";
+    const target = document.elementFromPoint(x, y);
+    dragGhostEl.style.visibility = "visible";
     return target;
+  }
+
+  function findSellSlotTarget(clientX, clientY) {
+    const sellSlotEl = document.getElementById("sell-slot");
+    if (!sellSlotEl || !isSellSlotDropActive()) {
+      return null;
+    }
+
+    const rect = sellSlotEl.getBoundingClientRect();
+    if (
+      clientX >= rect.left &&
+      clientX <= rect.right &&
+      clientY >= rect.top &&
+      clientY <= rect.bottom
+    ) {
+      return { type: "sell-slot", slotEl: sellSlotEl };
+    }
+
+    return null;
   }
 
   function findDropTarget(clientX, clientY) {
@@ -179,8 +245,15 @@
       }
     }
 
+    const sellSlotTarget = findSellSlotTarget(clientX, clientY);
+    if (sellSlotTarget) {
+      return sellSlotTarget;
+    }
+
     const target = elementUnderDragPoint(clientX, clientY);
-    const slotEl = target?.closest?.(".inventory__slot:not(.inventory__slot--locked)");
+    const slotEl = target?.closest?.(
+      ".inventory__slot:not(.inventory__slot--locked):not(.inventory__slot--display-only):not(.bazaar__sell-slot)",
+    );
     if (!slotEl) {
       return null;
     }
@@ -219,10 +292,85 @@
       discardBtn?.classList.add("inventory__discard-btn--drop-target");
       return;
     }
+    if (dropTarget?.type === "sell-slot") {
+      sellSlotDropHighlight = dropTarget.slotEl;
+      sellSlotDropHighlight.classList.add("bazaar__sell-slot--drop-target");
+      return;
+    }
     if (dropTarget?.type === "slot") {
       dropHighlightEl = dropTarget.slotEl;
       dropHighlightEl.classList.add("inventory__slot--drop-target");
     }
+  }
+
+  function isDestSlotEmpty(viewPocket, slotIndex) {
+    const items = pocketItems(viewPocket);
+    const slotMap = buildSlotMap(items, viewPocket);
+    return !slotMap.has(slotIndex);
+  }
+
+  function canSplitDrag(drag, dropTarget) {
+    const stackQty = Number(drag.entry?.quantity || 1);
+    if (!drag.splitDrag || stackQty <= 1) {
+      return false;
+    }
+
+    if (dropTarget.type !== "slot") {
+      return false;
+    }
+
+    if (
+      drag.sourcePocket === dropTarget.pocket &&
+      drag.sourceSlot === dropTarget.slot
+    ) {
+      return false;
+    }
+
+    if (!canAcceptItemInPocket(drag.entry, dropTarget.viewPocket)) {
+      return false;
+    }
+
+    if (isSlotLocked(dropTarget.viewPocket, dropTarget.slot)) {
+      return false;
+    }
+
+    return isDestSlotEmpty(dropTarget.viewPocket, dropTarget.slot);
+  }
+
+  function promptSplitMove(drag, dropTarget, event) {
+    const stackQty = Number(drag.entry?.quantity || 1);
+    const maxQuantity = stackQty;
+    const splitRequest = {
+      instanceId: drag.instanceId,
+      pocket: dropTarget.pocket,
+      slot: dropTarget.slot,
+    };
+
+    window.NosQuantityDialog?.open({
+      useBodyOverlay: true,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      title: "How many to move ?",
+      ariaLabel: "How many to move",
+      maxQuantity,
+      minQuantity: 1,
+      onConfirm: async (amount) => {
+        if (amount < 1 || amount > stackQty) {
+          return;
+        }
+
+        try {
+          await splitInventoryItem(
+            splitRequest.instanceId,
+            splitRequest.pocket,
+            splitRequest.slot,
+            amount,
+          );
+        } catch {
+          await loadInventory().catch(() => {});
+        }
+      },
+    });
   }
 
   function confirmDiscardItem(instanceId) {
@@ -262,6 +410,11 @@
       return;
     }
 
+    if (dropTarget.type === "sell-slot") {
+      window.NosBazaar?.onInventoryDropForSell?.(drag, event);
+      return;
+    }
+
     if (dropTarget.type !== "slot") {
       return;
     }
@@ -278,6 +431,11 @@
     }
 
     if (isSlotLocked(dropTarget.viewPocket, dropTarget.slot)) {
+      return;
+    }
+
+    if (canSplitDrag(drag, dropTarget)) {
+      promptSplitMove(drag, dropTarget, event);
       return;
     }
 
@@ -305,6 +463,7 @@
       sourceSlot: entry.slot,
       entry,
       sourceEl: slotEl,
+      splitDrag: event.ctrlKey,
     };
     slotEl.classList.add("inventory__slot--drag-source");
 
@@ -318,6 +477,7 @@
       document.body.appendChild(dragGhostEl);
     }
 
+    rootEl?.classList.add("inventory--item-dragging");
     document.addEventListener("mousemove", onItemDragMove);
     document.addEventListener("mouseup", onItemDragEnd);
   }
@@ -415,6 +575,30 @@
 
     slot.addEventListener("mousedown", (event) => {
       beginItemDrag(event, entry, pocketKey, slotIndex, slot);
+    });
+
+    slot.addEventListener("dblclick", () => {
+      const itemVNum = Number(entry.item?.itemVNum);
+      if (!MERCHANT_MEDAL_VNUMS.has(itemVNum)) return;
+      window.showMainInfoDialog?.("Use the item.", {
+        hideTitle: true,
+        onConfirm: async () => {
+          try {
+            const payload = await useMerchantMedal(entry.instanceId);
+            if (payload.activatedItemName) {
+              window.ChatUI?.appendAppMessage?.(
+                `The ${payload.activatedItemName} effect has been activated!`,
+              );
+            }
+          } catch {
+            // Ignore use failures for now.
+          }
+          window.hideMainInfoDialog?.();
+        },
+        onCancel: () => {
+          window.hideMainInfoDialog?.();
+        },
+      });
     });
 
     slot.addEventListener("contextmenu", (event) => {
@@ -587,6 +771,9 @@
 
   async function loadInventory() {
     const response = await fetch("/api/inventory", { credentials: "same-origin" });
+    if (await window.SessionFlow?.respondToUnauthorized?.(response)) {
+      return;
+    }
     if (!response.ok) {
       throw new Error("Could not load inventory.");
     }
@@ -614,6 +801,7 @@
   }
 
   function closeInventoryWindow() {
+    window.NosQuantityDialog?.close?.();
     closeAdditionalWindows();
     if (layerEl) layerEl.hidden = true;
   }
@@ -670,6 +858,7 @@
     close: closeInventoryWindow,
     toggle: toggleInventoryWindow,
     reload: loadInventory,
+    applyPayload: applyInventoryPayload,
     reposition: () => positionInventoryWindow(false),
     repositionAttached: repositionAdditionalWindows,
     onMainWindowDragEnd,

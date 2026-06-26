@@ -58,7 +58,10 @@ function showAlertDialog(message, onConfirm) {
 }
 
 window.showPlayDisconnectDialog = (onConfirm) => {
-  showAlertDialog("Disconnected from server.", onConfirm);
+  showAlertDialog(
+    window.SessionFlow?.DISCONNECT_MESSAGE || "Connection was lost.\nThe game client will be closed.",
+    onConfirm,
+  );
 };
 
 function showConfirmDialog(message, onConfirm) {

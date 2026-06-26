@@ -869,6 +869,7 @@ function hideMainInfoDialog() {
 
   mainInfoLayer.hidden = true;
   if (mainInfoTitle) {
+    mainInfoTitle.classList.remove("login-info__title--hidden");
     mainInfoTitle.hidden = false;
   }
   mainInfoPrimary.disabled = false;
@@ -885,6 +886,10 @@ function showMainAlertDialog(message, onConfirm) {
 
   closeSettingsMenu();
   window.bringDialogLayerToFront?.(mainInfoLayer);
+  if (mainInfoTitle) {
+    mainInfoTitle.classList.remove("login-info__title--hidden");
+    mainInfoTitle.hidden = false;
+  }
   mainInfoMessage.textContent = message;
   mainInfoSecondary.hidden = true;
   mainInfoPrimary.disabled = false;
@@ -904,7 +909,7 @@ function showMainAlertDialog(message, onConfirm) {
 window.showMainAlertDialog = showMainAlertDialog;
 
 window.showPlayDisconnectDialog = (onConfirm) => {
-  showMainAlertDialog("Disconnected from server.", onConfirm);
+  showMainAlertDialog(window.SessionFlow?.DISCONNECT_MESSAGE || "Connection was lost.\nThe game client will be closed.", onConfirm);
 };
 
 function showMainInfoDialog(message, { onConfirm, onCancel, hideTitle = false } = {}) {
@@ -913,7 +918,8 @@ function showMainInfoDialog(message, { onConfirm, onCancel, hideTitle = false } 
   closeSettingsMenu();
   window.bringDialogLayerToFront?.(mainInfoLayer);
   if (mainInfoTitle) {
-    mainInfoTitle.hidden = hideTitle;
+    mainInfoTitle.classList.toggle("login-info__title--hidden", hideTitle);
+    mainInfoTitle.hidden = false;
   }
   mainInfoMessage.textContent = message;
   mainInfoSecondary.hidden = false;
@@ -1045,10 +1051,11 @@ function showMainCharacter(me) {
   }
 
   if (!mainCharacterView) {
-    mainCharacterView = window.CharacterView.mount(mainCharacterSpriteEl, {
-      build: true,
-      previewZoom: window.CharacterView.DEFAULT_PREVIEW_ZOOM,
-    });
+    mainCharacterView = window.CharacterView.render(
+      mainCharacterSpriteEl,
+      null,
+      { profile: "main", build: true },
+    );
   }
 
   if (!mainCharacterView) {

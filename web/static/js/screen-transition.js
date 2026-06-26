@@ -2,6 +2,9 @@ const FADE_MS = 700;
 const BLACK_HOLD_MS = 120;
 const STORAGE_KEY = "nosbazaar.fadeIn";
 
+let navigating = false;
+let fadeInStarted = false;
+
 function prefersReducedMotion() {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
@@ -112,6 +115,32 @@ function clearFadeInFromUrl() {
   }
 }
 
+function revealPageContent() {
+  const root = document.documentElement;
+  root.classList.remove("screen-transition--pending-in");
+  root.style.backgroundColor = "";
+}
+
+function removeTransitionOverlay() {
+  const overlay = document.querySelector(".screen-transition__overlay");
+  if (overlay) {
+    overlay.classList.remove(
+      "screen-transition__overlay--visible",
+      "screen-transition__overlay--instant",
+    );
+    overlay.remove();
+  }
+}
+
+function revealPage() {
+  revealPageContent();
+  removeTransitionOverlay();
+}
+
+function resetPendingTransition() {
+  revealPage();
+}
+
 function markPendingFadeIn() {
   if (prefersReducedMotion()) {
     return;
@@ -121,9 +150,7 @@ function markPendingFadeIn() {
     return;
   }
 
-  const root = document.documentElement;
-  root.classList.add("screen-transition--pending-in");
-  root.style.backgroundColor = "#000";
+  document.documentElement.classList.add("screen-transition--pending-in");
 }
 
 async function fadeToBlack() {
@@ -140,32 +167,57 @@ async function fadeToBlack() {
   await hold(BLACK_HOLD_MS);
 }
 
-async function navigateWithFade(url) {
-  await fadeToBlack();
+function schedulePendingRevealFallback() {
+  window.setTimeout(() => {
+    if (document.documentElement.classList.contains("screen-transition--pending-in")) {
+      resetPendingTransition();
+    }
+  }, 2500);
+}
 
-  try {
-    sessionStorage.setItem(STORAGE_KEY, "1");
-  } catch {
-    // Continue without fade-in on the next page.
+async function navigateWithFade(url) {
+  if (!url || navigating) {
+    return;
   }
 
-  window.location.href = withFadeInFlag(url);
+  navigating = true;
+  const target = withFadeInFlag(url);
+
+  try {
+    await window.UiSound?.waitForClickSound?.();
+    await fadeToBlack();
+    try {
+      sessionStorage.setItem(STORAGE_KEY, "1");
+    } catch {
+      // Continue without fade-in on the next page.
+    }
+    window.location.assign(target);
+  } catch {
+    navigating = false;
+    window.location.assign(target);
+  }
 }
 
-function navigateInstant(url) {
-  window.location.href = url;
-}
+async function navigateInstant(url) {
+  if (!url || navigating) {
+    return;
+  }
 
-function removeOverlay(overlay) {
-  overlay.classList.remove(
-    "screen-transition__overlay--visible",
-    "screen-transition__overlay--instant",
-  );
-  overlay.remove();
+  navigating = true;
+  try {
+    await window.UiSound?.waitForClickSound?.();
+    window.location.assign(url);
+  } catch {
+    navigating = false;
+    window.location.assign(url);
+  }
 }
 
 async function fadeInIfNeeded() {
-  const root = document.documentElement;
+  if (fadeInStarted) {
+    return;
+  }
+  fadeInStarted = true;
 
   if (prefersReducedMotion()) {
     try {
@@ -173,12 +225,11 @@ async function fadeInIfNeeded() {
     } catch {
       // Ignore storage errors.
     }
-    root.classList.remove("screen-transition--pending-in");
-    root.style.backgroundColor = "";
+    resetPendingTransition();
     return;
   }
 
-  let shouldFadeIn = shouldFadeInFromPage();
+  const shouldFadeIn = shouldFadeInFromPage();
   if (shouldFadeIn) {
     try {
       sessionStorage.removeItem(STORAGE_KEY);
@@ -188,24 +239,27 @@ async function fadeInIfNeeded() {
   }
 
   if (!shouldFadeIn) {
+    resetPendingTransition();
     return;
   }
 
-  const overlay = ensureOverlay();
-  overlay.classList.add("screen-transition__overlay--visible", "screen-transition__overlay--instant");
-  void overlay.offsetHeight;
+  try {
+    const overlay = ensureOverlay();
+    overlay.classList.add("screen-transition__overlay--visible", "screen-transition__overlay--instant");
+    void overlay.offsetHeight;
 
-  await nextPaint();
-  await hold(BLACK_HOLD_MS);
+    await nextPaint();
+    await hold(BLACK_HOLD_MS);
 
-  overlay.classList.remove("screen-transition__overlay--instant");
-  await nextPaint();
-  await animateOverlay(overlay, false);
-
-  root.classList.remove("screen-transition--pending-in");
-  root.style.backgroundColor = "";
-  clearFadeInFromUrl();
-  removeOverlay(overlay);
+    overlay.classList.remove("screen-transition__overlay--instant");
+    await nextPaint();
+    revealPageContent();
+    await animateOverlay(overlay, false);
+    clearFadeInFromUrl();
+    removeTransitionOverlay();
+  } catch {
+    revealPage();
+  }
 }
 
 window.ScreenTransition = {
@@ -216,15 +270,30 @@ window.ScreenTransition = {
   navigateWithFade,
   navigateInstant,
   fadeInIfNeeded,
+  resetPendingTransition,
+  revealPage,
 };
 
 applyFadeDuration();
 markPendingFadeIn();
+schedulePendingRevealFallback();
 
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", () => {
-    void fadeInIfNeeded();
-  });
-} else {
+function bootFadeIn() {
   void fadeInIfNeeded();
 }
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", bootFadeIn, { once: true });
+  window.addEventListener("load", bootFadeIn, { once: true });
+} else {
+  bootFadeIn();
+}
+
+window.addEventListener("pageshow", (event) => {
+  if (!event.persisted) {
+    return;
+  }
+  fadeInStarted = false;
+  resetPendingTransition();
+  bootFadeIn();
+});

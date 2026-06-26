@@ -1,3 +1,4 @@
 {
-  "championLevelThreshold": 90
+  "championLevelThreshold": 90,
+  "maxCharactersPerAccount": 4
 }

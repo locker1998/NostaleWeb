@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS characters (
   IsDeleted INTEGER NOT NULL DEFAULT 0,
   FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE,
   UNIQUE(account_id, slot_index),
-  CHECK(slot_index BETWEEN 1 AND 3)
+  CHECK(slot_index BETWEEN 1 AND 99)
 );
 
 CREATE TABLE IF NOT EXISTS items (
@@ -113,6 +113,9 @@ CREATE TABLE IF NOT EXISTS bazaar (
   item_instance_id INTEGER NOT NULL,
   price INTEGER NOT NULL,
   list_date TEXT NOT NULL,
+  listing_period INTEGER NOT NULL DEFAULT 30,
+  bundle_sale INTEGER NOT NULL DEFAULT 0,
+  listed_quantity INTEGER,
   FOREIGN KEY (character_id) REFERENCES characters(id),
   FOREIGN KEY (item_instance_id) REFERENCES item_instances(id)
 );
@@ -123,6 +126,19 @@ CREATE INDEX IF NOT EXISTS idx_bazaar_list_date ON bazaar(list_date);
 CREATE INDEX IF NOT EXISTS idx_item_instances_vnum ON item_instances(ItemVNum);
 CREATE INDEX IF NOT EXISTS idx_character_inventory_character ON character_inventory(character_id);
 CREATE INDEX IF NOT EXISTS idx_character_inventory_instance ON character_inventory(item_instance_id);
+CREATE TABLE IF NOT EXISTS character_merchant_medals (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  character_id INTEGER NOT NULL,
+  item_vnum INTEGER NOT NULL,
+  started_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE,
+  FOREIGN KEY (item_vnum) REFERENCES items(ItemVNum)
+);
+
+CREATE INDEX IF NOT EXISTS idx_character_merchant_medals_character ON character_merchant_medals(character_id);
+CREATE INDEX IF NOT EXISTS idx_character_merchant_medals_expires ON character_merchant_medals(character_id, expires_at);
+
 CREATE INDEX IF NOT EXISTS idx_characters_account ON characters(account_id);
 CREATE INDEX IF NOT EXISTS idx_items_category ON items(category);
 CREATE INDEX IF NOT EXISTS idx_items_item_type ON items(ItemType, ItemSubType);

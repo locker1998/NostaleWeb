@@ -10,6 +10,7 @@ const infoSecondary = document.getElementById("login-info-secondary");
 
 let infoPrimaryHandler = null;
 let infoSecondaryHandler = null;
+let loginInProgress = false;
 
 function isInfoDialogOpen() {
   return !infoLayer.hidden;
@@ -102,6 +103,10 @@ async function clearLogoutSession() {
 }
 
 async function checkExistingSession() {
+  if (loginInProgress) {
+    return;
+  }
+
   try {
     await window.SessionFlow.redirectIfAuthenticatedForPlay({ skipWhenLogout: true });
   } catch {
@@ -111,10 +116,11 @@ async function checkExistingSession() {
 
 loginForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  if (isInfoDialogOpen()) {
+  if (isInfoDialogOpen() || loginInProgress) {
     return;
   }
 
+  loginInProgress = true;
   setLoginFormEnabled(false);
 
   const username = usernameInput.value.trim();
@@ -140,10 +146,16 @@ loginForm.addEventListener("submit", async (event) => {
       return;
     }
 
-    window.location.href = result.redirect || "/play/select-channel";
+    const target = result.redirect || "/play/select-channel";
+    if (window.ScreenTransition?.navigateInstant) {
+      await window.ScreenTransition.navigateInstant(target);
+    } else {
+      await window.SessionFlow.navigateToUrl(target);
+    }
   } catch {
     showInfoDialog(formatNetworkError());
   } finally {
+    loginInProgress = false;
     if (!isInfoDialogOpen()) {
       setLoginFormEnabled(true);
     }
@@ -156,7 +168,7 @@ document.getElementById("login-cancel").addEventListener("click", () => {
   }
 
   if (isLogoutReturn()) {
-    window.location.href = "/";
+    void window.SessionFlow.navigateToUrl("/");
     return;
   }
 
@@ -167,6 +179,7 @@ document.getElementById("login-cancel").addEventListener("click", () => {
       infoSecondary.disabled = true;
 
       const result = await window.SessionFlow.logoutToIndex();
+      await window.UiSound?.waitForClickSound?.();
       window.location.replace(result.indexUrl || "/");
     },
   });

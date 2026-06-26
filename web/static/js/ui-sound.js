@@ -1,4 +1,6 @@
 const CLICK_SOUND_SRC = "/assets/click.mp3";
+const CLICK_SOUND_FALLBACK_MS = 280;
+const CLICK_SOUND_DEBOUNCE_MS = 60;
 
 // Game UI actions that play the click sound — not every HTML <button>.
 const GAME_BUTTON_SELECTOR = [
@@ -24,6 +26,9 @@ const GAME_BUTTON_SELECTOR = [
   ".server-select__item--server",
   ".server-select__item--channel",
   ".server-select__leave",
+  ".character-select__slot-btn",
+  ".character-select__action-btn",
+  ".character-select__nav",
   ".selection-list__item",
   ".selection-list__item--empty",
   ".create-character__tile",
@@ -39,48 +44,71 @@ const GAME_BUTTON_SELECTOR = [
   ".inventory__tab",
 ].join(", ");
 
-let clickAudio = null;
+let unlockProbe = null;
 let lastPlayedAt = 0;
 let audioUnlocked = false;
 let sfxVolume = 1;
 let sfxMuted = false;
+let clickSoundPlayback = null;
 
 function getEffectiveSfxVolume() {
   return sfxMuted ? 0 : sfxVolume;
 }
 
-function getClickAudio() {
-  if (!clickAudio) {
-    clickAudio = new Audio(CLICK_SOUND_SRC);
-    clickAudio.preload = "auto";
+function getUnlockProbe() {
+  if (!unlockProbe) {
+    unlockProbe = new Audio(CLICK_SOUND_SRC);
+    unlockProbe.preload = "auto";
   }
-  return clickAudio;
+  return unlockProbe;
+}
+
+function markAudioUnlocked() {
+  if (audioUnlocked) {
+    return;
+  }
+  audioUnlocked = true;
+  try {
+    sessionStorage.setItem("nosbazaar.audioUnlocked", "1");
+  } catch {
+    // Ignore storage errors.
+  }
+  void window.MainBgm?.start?.();
+}
+
+function tryStartMainBgm() {
+  if (document.body.classList.contains("page-main")) {
+    void window.MainBgm?.start?.();
+  }
 }
 
 function unlockAudio() {
   if (audioUnlocked) {
     return;
   }
-  const audio = getClickAudio();
-  audio.volume = 1;
-  const attempt = audio.play();
+
+  const probe = getUnlockProbe();
+  probe.volume = 0.001;
+  probe.currentTime = 0;
+  const attempt = probe.play();
   if (!attempt) {
-    audioUnlocked = true;
+    markAudioUnlocked();
     return;
   }
+
   attempt
     .then(() => {
-      audio.pause();
-      audio.currentTime = 0;
-      audioUnlocked = true;
-      window.MainBgm?.start?.();
+      probe.pause();
+      probe.currentTime = 0;
+      markAudioUnlocked();
     })
     .catch(() => {});
 }
 
 function playClickSound() {
   if (sfxMuted) {
-    return;
+    clickSoundPlayback = Promise.resolve();
+    return clickSoundPlayback;
   }
 
   if (!audioUnlocked) {
@@ -88,15 +116,46 @@ function playClickSound() {
   }
 
   const now = Date.now();
-  if (now - lastPlayedAt < 80) {
-    return;
+  if (now - lastPlayedAt < CLICK_SOUND_DEBOUNCE_MS && clickSoundPlayback) {
+    return clickSoundPlayback;
   }
   lastPlayedAt = now;
 
-  const audio = getClickAudio();
+  const audio = new Audio(CLICK_SOUND_SRC);
+  audio.preload = "auto";
   audio.volume = getEffectiveSfxVolume();
-  audio.currentTime = 0;
-  void audio.play().catch(() => {});
+
+  const playback = new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      resolve();
+    };
+
+    audio.addEventListener("ended", finish, { once: true });
+    window.setTimeout(finish, CLICK_SOUND_FALLBACK_MS);
+    void audio.play().catch(finish);
+  });
+
+  clickSoundPlayback = playback;
+  void playback.finally(() => {
+    if (clickSoundPlayback === playback) {
+      clickSoundPlayback = null;
+    }
+  });
+
+  return playback;
+}
+
+async function waitForClickSound() {
+  const pending = clickSoundPlayback || Promise.resolve();
+  const cap = new Promise((resolve) => {
+    window.setTimeout(resolve, CLICK_SOUND_FALLBACK_MS + 60);
+  });
+  await Promise.race([pending, cap]);
 }
 
 function setSfxVolume(volume) {
@@ -130,7 +189,40 @@ function isGameButton(target) {
 }
 
 function handleGameButtonPress(event) {
+  if (event.button !== 0) {
+    return;
+  }
   if (!isGameButton(event.target)) {
+    return;
+  }
+  playClickSound();
+}
+
+function shouldPlayKeyboardAction(target, key) {
+  if (!(target instanceof Element)) {
+    return false;
+  }
+  if (target.closest(".chatbox")) {
+    return false;
+  }
+  if (key === " " && target.matches("input, textarea, select")) {
+    return false;
+  }
+  if (target.matches("input, select, textarea")) {
+    const form = target.form;
+    return Boolean(form?.querySelector(GAME_BUTTON_SELECTOR));
+  }
+  return isGameButton(target);
+}
+
+function handleGameButtonKeydown(event) {
+  if (event.key !== "Enter" && event.key !== " ") {
+    return;
+  }
+  if (event.repeat || event.defaultPrevented) {
+    return;
+  }
+  if (!shouldPlayKeyboardAction(event.target, event.key)) {
     return;
   }
   playClickSound();
@@ -140,17 +232,23 @@ document.addEventListener(
   "pointerdown",
   (event) => {
     unlockAudio();
+    tryStartMainBgm();
     handleGameButtonPress(event);
   },
   { capture: true, passive: true },
 );
-document.addEventListener("click", handleGameButtonPress, true);
+document.addEventListener("keydown", (event) => {
+  unlockAudio();
+  tryStartMainBgm();
+  handleGameButtonKeydown(event);
+}, true);
 document.addEventListener("contextmenu", (event) => {
   event.preventDefault();
 });
 
 window.UiSound = {
   playClickSound,
+  waitForClickSound,
   setVolume: setSfxVolume,
   setMuted: setSfxMuted,
 };

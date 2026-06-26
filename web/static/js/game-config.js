@@ -66,8 +66,11 @@
   function applyAudioSettings() {
     window.UiSound?.setVolume?.(settings.sfxMuted ? 0 : settings.sfxVolume / 100);
     window.UiSound?.setMuted?.(settings.sfxMuted);
-    window.MainBgm?.setVolume?.(settings.bgmMuted ? 0 : settings.bgmVolume / 100);
+    window.MainBgm?.setVolume?.(settings.bgmVolume / 100);
     window.MainBgm?.setMuted?.(settings.bgmMuted);
+    if (!settings.bgmMuted) {
+      void window.MainBgm?.start?.();
+    }
   }
 
   function setDisplayMode(modeId) {

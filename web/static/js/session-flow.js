@@ -17,7 +17,7 @@ const SESSION_ROUTES = {
 const DEFAULT_LOGIN_PORT = 8080;
 const LOGIN_ORIGIN_STORAGE_KEY = "nosbazaar.loginOrigin";
 const CONNECTION_WATCH_MS = 4000;
-const DISCONNECT_MESSAGE = "Disconnected from server.";
+const DISCONNECT_MESSAGE = "Connection was lost.\nThe game client will be closed.";
 
 function bringDialogLayerToFront(layer) {
   if (!layer) {
@@ -445,6 +445,10 @@ function isPlayLoginUrl(url) {
   }
 }
 
+function shouldRunConnectionWatch() {
+  return window.location.pathname === PLAY_MAIN;
+}
+
 async function navigateToUrl(url) {
   if (!url) {
     return;
@@ -461,6 +465,7 @@ async function navigateToUrl(url) {
     return;
   }
 
+  await window.UiSound?.waitForClickSound?.();
   window.location.href = resolved.toString();
 }
 
@@ -637,6 +642,7 @@ window.fetch = async function patchedFetch(input, init) {
 };
 
 window.SessionFlow = {
+  DISCONNECT_MESSAGE,
   fetchSessionStatus,
   fetchSessionStatusFromLogin,
   resolveLoginOrigin,
@@ -672,6 +678,6 @@ window.SessionFlow = {
   SESSION_ROUTES,
 };
 
-if (isProtectedPlayPage()) {
+if (shouldRunConnectionWatch()) {
   startConnectionWatch();
 }

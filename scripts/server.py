@@ -42,6 +42,7 @@ from inventory import (
     is_mount_item,
     move_inventory_item,
     pocket_id_to_key,
+    split_inventory_item,
 )
 from item_catalog import class_abbreviations, class_display, item_icon_url
 from routing.router import (
@@ -72,7 +73,9 @@ GAME_CONFIG_PATH = ROOT / "config" / "game.json"
 AUTH_CONFIG_PATH = ROOT / "config" / "auth.json"
 auth_config = load_auth_config(AUTH_CONFIG_PATH)
 LISTING_TTL_DAYS = 30
-MAX_CHARACTERS_PER_ACCOUNT = 3
+MAX_CHARACTER_GOLD = 2_000_000_000
+DEFAULT_MAX_CHARACTERS_PER_ACCOUNT = 4
+MAX_CHARACTERS_PER_ACCOUNT = DEFAULT_MAX_CHARACTERS_PER_ACCOUNT
 SUPERADMIN_ACCOUNT_ID = 0
 SUPERADMIN_DB_USERNAME = "__superadmin__"
 MIN_USERNAME_LENGTH = 3
@@ -120,7 +123,35 @@ CHAMPION_LEVEL_THRESHOLD = DEFAULT_CHAMPION_LEVEL_THRESHOLD
 
 
 class BazaarHTTPServer(ThreadingHTTPServer):
-    allow_reuse_address = False
+    allow_reuse_address = True
+    daemon_threads = True
+
+
+_static_cache: dict[str, tuple[int, bytes, str]] = {}
+_static_cache_lock = threading.Lock()
+
+
+def read_cached_static(file_path: Path) -> tuple[bytes, str]:
+    key = file_path.as_posix()
+    stat = file_path.stat()
+    mtime_ns = stat.st_mtime_ns
+    with _static_cache_lock:
+        cached = _static_cache.get(key)
+        if cached and cached[0] == mtime_ns:
+            return cached[1], cached[2]
+
+        content = file_path.read_bytes()
+        content_type = static_content_type(file_path)
+        _static_cache[key] = (mtime_ns, content, content_type)
+        return content, content_type
+
+
+def warm_static_cache() -> None:
+    static_root = ROOT / "web" / "static"
+    for pattern in ("css/*.css", "js/*.js"):
+        for path in static_root.glob(pattern):
+            if path.is_file():
+                read_cached_static(path)
 
 
 def assert_port_available(port: int) -> None:
@@ -215,8 +246,9 @@ def load_server_config() -> tuple[int, dict[int, int]]:
 
 
 def load_game_config() -> None:
-    global CHAMPION_LEVEL_THRESHOLD
+    global CHAMPION_LEVEL_THRESHOLD, MAX_CHARACTERS_PER_ACCOUNT
     CHAMPION_LEVEL_THRESHOLD = DEFAULT_CHAMPION_LEVEL_THRESHOLD
+    MAX_CHARACTERS_PER_ACCOUNT = DEFAULT_MAX_CHARACTERS_PER_ACCOUNT
 
     if not GAME_CONFIG_PATH.is_file():
         return
@@ -238,6 +270,18 @@ def load_game_config() -> None:
         raise SystemExit(f"championLevelThreshold must be >= 1 in {GAME_CONFIG_PATH}")
 
     CHAMPION_LEVEL_THRESHOLD = threshold
+
+    try:
+        max_characters = int(
+            data.get("maxCharactersPerAccount", DEFAULT_MAX_CHARACTERS_PER_ACCOUNT),
+        )
+    except (TypeError, ValueError) as exc:
+        raise SystemExit(f"Invalid maxCharactersPerAccount in {GAME_CONFIG_PATH}") from exc
+
+    if max_characters < 1:
+        raise SystemExit(f"maxCharactersPerAccount must be >= 1 in {GAME_CONFIG_PATH}")
+
+    MAX_CHARACTERS_PER_ACCOUNT = max_characters
 
 
 def lobby_url(path: str) -> str:
@@ -729,8 +773,9 @@ def admin_delete_character(character_id: int) -> None:
 
 @contextmanager
 def get_connection():
-    conn = sqlite3.connect(vault.db_work_path())
+    conn = sqlite3.connect(vault.db_work_path(), timeout=5)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
     try:
         yield conn
     except Exception:
@@ -751,7 +796,9 @@ def load_filters() -> dict:
 
 
 def listing_expiry_sql() -> str:
-    return f"date(b.list_date, '+{LISTING_TTL_DAYS} days')"
+    from bazaar_sell import listing_expiry_sql as _listing_expiry_sql
+
+    return _listing_expiry_sql()
 
 
 ITEM_SELECT_SQL = """
@@ -881,6 +928,7 @@ def fetch_character_inventory(conn: sqlite3.Connection, character_id: int) -> di
     mount_items: list[dict[str, Any]] = []
 
     for row in rows:
+        pocket = int(row["pocket"])
         entry = {
             "slot": int(row["slot"]),
             "pocket": pocket_id_to_key(pocket),
@@ -888,7 +936,6 @@ def fetch_character_inventory(conn: sqlite3.Connection, character_id: int) -> di
             "quantity": int(row["quantity"]),
             "item": item_to_dict(row),
         }
-        pocket = int(row["pocket"])
         if pocket in pocket_items:
             pocket_items[pocket].append(entry)
         if is_mount_item(row):
@@ -911,6 +958,8 @@ def fetch_character_inventory(conn: sqlite3.Connection, character_id: int) -> di
 
 
 def fetch_listings(conn: sqlite3.Connection) -> list[dict]:
+    from bazaar_sell import format_listing_days_remaining
+
     expiry = listing_expiry_sql()
     rows = conn.execute(
         f"""
@@ -918,7 +967,8 @@ def fetch_listings(conn: sqlite3.Connection) -> list[dict]:
           b.id,
           b.price AS listing_price,
           b.list_date,
-          CAST((julianday({expiry}) - julianday('now')) AS INTEGER) AS days_left,
+          COALESCE(b.listed_quantity, ii.Quantity) AS listed_quantity,
+          (julianday({expiry}) - julianday('now')) AS days_left,
           ii.id AS item_instance_id,
           ii.Quantity AS quantity,
           c.name AS seller,
@@ -928,28 +978,70 @@ def fetch_listings(conn: sqlite3.Connection) -> list[dict]:
         JOIN items i ON ii.ItemVNum = i.ItemVNum
         JOIN characters c ON b.character_id = c.id
         WHERE julianday({expiry}) >= julianday('now')
+          AND ii.Quantity > 0
         ORDER BY b.id
         """
     ).fetchall()
 
-    return [
-        {
-            "id": str(row["id"]),
-            "name": row["name"],
-            "itemVNum": row["ItemVNum"],
-            "iconId": row["IconId"] or row["ItemVNum"],
-            "iconUrl": item_icon_url(row["ItemVNum"]),
-            "amount": row["quantity"],
-            "price": row["listing_price"],
-            "days": max(0, row["days_left"]),
-            "seller": row["seller"],
-            "category": row["category"],
-            "listDate": row["list_date"],
-            "itemInstanceId": row["item_instance_id"],
-            "item": item_to_dict(row),
-        }
-        for row in rows
-    ]
+    return [_listing_row_to_dict(row, format_listing_days_remaining) for row in rows]
+
+
+def _listing_row_to_dict(row: sqlite3.Row, format_days) -> dict:
+    days_left = float(row["days_left"])
+    is_expired = bool(row["is_expired"]) if "is_expired" in row.keys() else days_left < 0
+    listed_quantity = (
+        int(row["listed_quantity"])
+        if "listed_quantity" in row.keys() and row["listed_quantity"] is not None
+        else int(row["quantity"])
+    )
+    return {
+        "id": str(row["id"]),
+        "name": row["name"],
+        "itemVNum": row["ItemVNum"],
+        "iconId": row["IconId"] or row["ItemVNum"],
+        "iconUrl": item_icon_url(row["ItemVNum"]),
+        "amount": int(row["quantity"]),
+        "listedQuantity": listed_quantity,
+        "price": row["listing_price"],
+        "days": format_days(days_left) if not is_expired else 0,
+        "seller": row["seller"],
+        "category": row["category"],
+        "listDate": row["list_date"],
+        "itemInstanceId": row["item_instance_id"],
+        "isExpired": is_expired,
+        "item": item_to_dict(row),
+    }
+
+
+def fetch_my_listings(conn: sqlite3.Connection, character_id: int) -> list[dict]:
+    from bazaar_sell import format_listing_days_remaining
+
+    expiry = listing_expiry_sql()
+    rows = conn.execute(
+        f"""
+        SELECT
+          b.id,
+          b.price AS listing_price,
+          b.list_date,
+          b.listing_period,
+          COALESCE(b.listed_quantity, ii.Quantity) AS listed_quantity,
+          (julianday({expiry}) - julianday('now')) AS days_left,
+          CASE WHEN julianday({expiry}) < julianday('now') THEN 1 ELSE 0 END AS is_expired,
+          ii.id AS item_instance_id,
+          ii.Quantity AS quantity,
+          c.name AS seller,
+          {ITEM_SELECT_SQL}
+        FROM bazaar b
+        JOIN item_instances ii ON b.item_instance_id = ii.id
+        JOIN items i ON ii.ItemVNum = i.ItemVNum
+        JOIN characters c ON b.character_id = c.id
+        WHERE b.character_id = ?
+        ORDER BY b.id DESC
+        """,
+        (character_id,),
+    ).fetchall()
+
+    return [_listing_row_to_dict(row, format_listing_days_remaining) for row in rows]
 
 
 def fetch_skills(conn: sqlite3.Connection) -> list[dict]:
@@ -1066,7 +1158,7 @@ def ensure_superadmin_account() -> None:
 def list_characters(conn: sqlite3.Connection, account_id: int) -> list[dict]:
     rows = conn.execute(
         """
-        SELECT id, name, slot_index, gold, level, champion_level, job, job_level, gender
+        SELECT id, name, slot_index, gold, level, champion_level, job, job_level, gender, hair_style, hair_colour
         FROM characters
         WHERE account_id = ? AND COALESCE(IsDeleted, 0) = 0
         ORDER BY slot_index
@@ -1085,6 +1177,8 @@ def list_characters(conn: sqlite3.Connection, account_id: int) -> list[dict]:
             "jobLabel": format_job_label(row["job"]),
             "jobLevel": row["job_level"],
             "gender": row["gender"],
+            "hairStyle": row["hair_style"],
+            "hairColour": row["hair_colour"],
         }
         for row in rows
     ]
@@ -1119,6 +1213,8 @@ def mark_account_deleted(account_id: int) -> None:
 
 
 def get_bootstrap(character_id: int) -> dict:
+    from bazaar_sell import get_active_merchant_medal
+
     filters = load_filters()
     with get_connection() as conn:
         character = get_character(conn, character_id)
@@ -1126,6 +1222,7 @@ def get_bootstrap(character_id: int) -> dict:
             raise ValueError("Character not found")
 
         listings = fetch_listings(conn)
+        merchant_medal = get_active_merchant_medal(conn, character_id)
 
     return {
         **filters,
@@ -1135,6 +1232,7 @@ def get_bootstrap(character_id: int) -> dict:
             "gold": character["gold"],
             "isGm": bool(character["IsGM"]),
         },
+        "merchantMedal": merchant_medal,
         "listings": listings,
     }
 
@@ -1332,7 +1430,8 @@ GM_CHAT_COMMANDS_HELP = [
     "$ban {playerName} - Ban a player from the server",
     "$mute {playerName} [minutes] - Mute a player from chat (default: 60)",
     "$unmute {playerName} - Unmute a player",
-    "$createitem {ItemVNum} {amount} - Create items",
+    "$createitem {ItemVNum} [amount] - Create items (default: 1)",
+    "$gold {amount} - Set your gold amount",
 ]
 
 ADMIN_CHAT_COMMANDS_HELP = [
@@ -1476,6 +1575,25 @@ def gm_create_item(character_id: int, item_vnum: int, amount: int) -> str:
     )
 
 
+def gm_set_gold(character_id: int, amount: int) -> tuple[str, int]:
+    if amount < 0:
+        raise ValueError("Amount must be 0 or greater.")
+    if amount > MAX_CHARACTER_GOLD:
+        raise ValueError(f"Amount cannot exceed {MAX_CHARACTER_GOLD:,}.")
+
+    with get_connection() as conn:
+        character = get_character(conn, character_id)
+        if character is None:
+            raise ValueError("Character not found.")
+
+        conn.execute(
+            "UPDATE characters SET gold = ? WHERE id = ?",
+            (amount, character_id),
+        )
+
+    return f"Gold set to {amount:,}.", amount
+
+
 def build_chat_command_help(is_admin: bool, is_gm: bool) -> str:
     lines = list(PLAYER_CHAT_COMMANDS_HELP)
     if is_gm:
@@ -1537,6 +1655,9 @@ def handle_chat_command(state: SessionState, body: str) -> list[dict[str, Any]]:
 
     def reply_inventory(text: str) -> list[dict[str, Any]]:
         return [append_private_command(text, recipient_name, inventoryChanged=True)]
+
+    def reply_gold(text: str, gold: int) -> list[dict[str, Any]]:
+        return [append_private_command(text, recipient_name, goldChanged=True, gold=gold)]
 
     def deny() -> list[dict[str, Any]]:
         return reply("You do not have permission to use this command.")
@@ -1601,18 +1722,36 @@ def handle_chat_command(state: SessionState, body: str) -> list[dict[str, Any]]:
     if command == "createitem":
         if not is_gm:
             return deny()
-        if len(args) != 2:
-            return reply("Usage: $createitem {ItemVNum} {amount}")
+        if len(args) < 1 or len(args) > 2:
+            return reply("Usage: $createitem {ItemVNum} [amount]")
         try:
             item_vnum = int(args[0])
-            amount = int(args[1])
+            amount = int(args[1]) if len(args) > 1 else 1
             if state.character_id is None:
                 return reply("Select a character before using $createitem.")
             return reply_inventory(gm_create_item(state.character_id, item_vnum, amount))
         except (TypeError, ValueError) as exc:
-            if isinstance(exc, ValueError) and str(exc).startswith(("Unknown item", "Amount must")):
+            if isinstance(exc, ValueError) and str(exc).startswith(
+                ("Unknown item", "Amount must", "Character not found")
+            ):
                 return reply(str(exc))
             return reply("ItemVNum and amount must be whole numbers.")
+
+    if command == "gold":
+        if not is_gm:
+            return deny()
+        if len(args) != 1:
+            return reply("Usage: $gold {amount}")
+        try:
+            amount = int(args[0])
+            if state.character_id is None:
+                return reply("Select a character before using $gold.")
+            message, gold = gm_set_gold(state.character_id, amount)
+            return reply_gold(message, gold)
+        except (TypeError, ValueError) as exc:
+            if isinstance(exc, ValueError):
+                return reply(str(exc))
+            return reply("Amount must be a whole number.")
 
     if command == "startchannel":
         if not is_admin:
@@ -2055,6 +2194,7 @@ def shutdown_game_channels(channel: int | None = None) -> dict[str, Any]:
 
         server, thread = runtime
         server.shutdown()
+        server.server_close()
         thread.join(timeout=5)
         stopped_channels.append(target_channel)
 
@@ -2071,9 +2211,82 @@ def shutdown_game_channels(channel: int | None = None) -> dict[str, Any]:
 
 
 def shutdown_all_servers() -> None:
+    global login_server
+
     shutdown_game_channels()
     if login_server is not None:
         login_server.shutdown()
+        login_server.server_close()
+        login_server = None
+
+
+def start_servers() -> threading.Thread:
+    global login_server
+
+    assert_port_available(LOGIN_PORT)
+
+    try:
+        login_server = BazaarHTTPServer((HOST, LOGIN_PORT), BazaarHandler)
+    except OSError as exc:
+        if getattr(exc, "winerror", None) == 10048 or exc.errno in (48, 98):
+            raise SystemExit(
+                f"Port {LOGIN_PORT} is already in use. Stop the other process then run: {server_run_hint()}"
+            ) from exc
+        raise
+
+    try:
+        start_game_channels()
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+
+    print(f"Serving NosBazaar login on {HOST}:{LOGIN_PORT}")
+    print(f"Use this server ({server_run_hint()}), not py -m http.server")
+
+    login_thread = threading.Thread(target=login_server.serve_forever, daemon=True)
+    login_thread.start()
+    return login_thread
+
+
+def restart_servers() -> threading.Thread:
+    print("\nRestarting server...")
+    shutdown_all_servers()
+    time.sleep(0.15)
+    ensure_ready()
+    warm_static_cache()
+    load_game_config()
+    return start_servers()
+
+
+def _watch_restart_hotkey(restart_event: threading.Event, stop_event: threading.Event) -> None:
+    if sys.platform == "win32":
+        import msvcrt
+
+        while not stop_event.is_set():
+            if msvcrt.kbhit():
+                key = msvcrt.getch()
+                if key == b"\x12":
+                    restart_event.set()
+            else:
+                stop_event.wait(0.1)
+        return
+
+    if not sys.stdin.isatty():
+        return
+
+    import select
+    import termios
+    import tty
+
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    try:
+        tty.setcbreak(fd)
+        while not stop_event.is_set():
+            ready, _, _ = select.select([sys.stdin], [], [], 0.1)
+            if ready and sys.stdin.read(1) == "\x12":
+                restart_event.set()
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
 
 def buy_listing(listing_id: int, buyer_id: int, quantity: int = 1) -> dict:
@@ -2088,7 +2301,9 @@ def buy_listing(listing_id: int, buyer_id: int, quantity: int = 1) -> dict:
               b.id,
               b.price,
               b.character_id AS seller_id,
+              b.bundle_sale,
               i.name,
+              i.ItemVNum AS item_vnum,
               ii.id AS instance_id,
               ii.Quantity AS available
             FROM bazaar b
@@ -2110,6 +2325,9 @@ def buy_listing(listing_id: int, buyer_id: int, quantity: int = 1) -> dict:
         if quantity > available:
             raise ValueError("Not enough stock")
 
+        if int(listing["bundle_sale"] or 0) and quantity != available:
+            raise ValueError("Bundle listings must be purchased in full.")
+
         unit_price = int(listing["price"])
         total_price = unit_price * quantity
 
@@ -2125,12 +2343,14 @@ def buy_listing(listing_id: int, buyer_id: int, quantity: int = 1) -> dict:
             raise ValueError("Seller not found")
 
         buyer_gold = buyer["gold"] - total_price
-        seller_gold = seller["gold"] + total_price
 
         conn.execute("UPDATE characters SET gold = ? WHERE id = ?", (buyer_gold, buyer_id))
-        conn.execute(
-            "UPDATE characters SET gold = ? WHERE id = ?",
-            (seller_gold, listing["seller_id"]),
+
+        add_item_to_character_inventory(
+            conn,
+            buyer_id,
+            int(listing["item_vnum"]),
+            quantity,
         )
 
         remaining = available - quantity
@@ -2140,8 +2360,10 @@ def buy_listing(listing_id: int, buyer_id: int, quantity: int = 1) -> dict:
                 (remaining, listing["instance_id"]),
             )
         else:
-            conn.execute("DELETE FROM bazaar WHERE id = ?", (listing_id,))
-            conn.execute("DELETE FROM item_instances WHERE id = ?", (listing["instance_id"]))
+            conn.execute(
+                "UPDATE item_instances SET Quantity = 0 WHERE id = ?",
+                (int(listing["instance_id"]),),
+            )
 
         conn.commit()
 
@@ -2241,7 +2463,14 @@ def build_session_status(
         return payload
 
     if state.character_id is None:
-        payload = {"step": "character", "loginUrl": login_url, "channel": state.channel, **authenticated, **payload_is_admin}
+        payload = {
+            "step": "character",
+            "loginUrl": login_url,
+            "channel": state.channel,
+            "maxCharacters": MAX_CHARACTERS_PER_ACCOUNT,
+            **authenticated,
+            **payload_is_admin,
+        }
         if not is_login_port(current_port):
             payload["lobbyUrl"] = lobby_url(PLAY_SELECT_CHARACTER)
         return payload
@@ -2271,6 +2500,8 @@ def build_session_status(
 
 
 class BazaarHandler(SimpleHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(ROOT / "web"), **kwargs)
 
@@ -2707,21 +2938,33 @@ class BazaarHandler(SimpleHTTPRequestHandler):
             with get_connection() as conn:
                 return self._json_response({"listings": fetch_listings(conn)})
 
-        if path == "/api/inventory":
+        if path == "/api/bazaar/my-listings":
             state = self._session_state()
             if not self._session_ready_for_game():
                 return self._json_response({"error": "Unauthorized"}, status=HTTPStatus.UNAUTHORIZED)
             with get_connection() as conn:
-                character = get_character(conn, state.character_id)
-                if character is None:
-                    return self._json_response({"error": "Character not found"}, status=HTTPStatus.BAD_REQUEST)
-                inventory = fetch_character_inventory(conn, state.character_id)
                 return self._json_response(
-                    {
-                        "inventory": inventory,
-                        "gold": int(character["gold"]),
-                    }
+                    {"listings": fetch_my_listings(conn, state.character_id)}
                 )
+
+        if path == "/api/inventory":
+            state = self._session_state()
+            if not self._session_ready_for_game():
+                return self._json_response({"error": "Unauthorized"}, status=HTTPStatus.UNAUTHORIZED)
+            try:
+                with get_connection() as conn:
+                    character = get_character(conn, state.character_id)
+                    if character is None:
+                        return self._json_response({"error": "Character not found"}, status=HTTPStatus.BAD_REQUEST)
+                    inventory = fetch_character_inventory(conn, state.character_id)
+                    return self._json_response(
+                        {
+                            "inventory": inventory,
+                            "gold": int(character["gold"]),
+                        }
+                    )
+            except (ValueError, sqlite3.Error) as exc:
+                return self._json_response({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
 
         if path == "/api/chat":
             state = self._session_state()
@@ -3122,6 +3365,8 @@ class BazaarHandler(SimpleHTTPRequestHandler):
                 return self._json_response({"ok": True, "inventory": inventory})
             except (TypeError, ValueError) as exc:
                 return self._json_response({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            except sqlite3.Error as exc:
+                return self._json_response({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
             except json.JSONDecodeError:
                 return self._json_response({"error": "Invalid JSON"}, status=HTTPStatus.BAD_REQUEST)
 
@@ -3137,6 +3382,167 @@ class BazaarHandler(SimpleHTTPRequestHandler):
                     inventory = fetch_character_inventory(conn, state.character_id)
                 return self._json_response({"ok": True, "inventory": inventory})
             except (TypeError, ValueError) as exc:
+                return self._json_response({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            except json.JSONDecodeError:
+                return self._json_response({"error": "Invalid JSON"}, status=HTTPStatus.BAD_REQUEST)
+
+        if path == "/api/inventory/split":
+            state = self._session_state()
+            if not self._session_ready_for_game():
+                return self._json_response({"error": "Unauthorized"}, status=HTTPStatus.UNAUTHORIZED)
+            try:
+                payload = self._read_json()
+                instance_id = int(payload.get("instanceId"))
+                pocket = str(payload.get("pocket", "")).strip().lower()
+                slot = int(payload.get("slot"))
+                amount = int(payload.get("amount"))
+                with get_connection() as conn:
+                    split_inventory_item(
+                        conn,
+                        state.character_id,
+                        instance_id,
+                        pocket,
+                        slot,
+                        amount,
+                    )
+                    inventory = fetch_character_inventory(conn, state.character_id)
+                return self._json_response({"ok": True, "inventory": inventory})
+            except (TypeError, ValueError) as exc:
+                return self._json_response({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            except sqlite3.Error as exc:
+                return self._json_response({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            except json.JSONDecodeError:
+                return self._json_response({"error": "Invalid JSON"}, status=HTTPStatus.BAD_REQUEST)
+
+        if path == "/api/bazaar/list":
+            state = self._session_state()
+            if not self._session_ready_for_game():
+                return self._json_response({"error": "Unauthorized"}, status=HTTPStatus.UNAUTHORIZED)
+            try:
+                from bazaar_sell import create_bazaar_listing
+
+                payload = self._read_json()
+                instance_id = int(payload.get("instanceId"))
+                quantity = int(payload.get("quantity"))
+                unit_price = int(payload.get("unitPrice"))
+                listing_period = int(payload.get("listingPeriod"))
+                bundle_sale = bool(payload.get("bundleSale"))
+                with get_connection() as conn:
+                    result = create_bazaar_listing(
+                        conn,
+                        state.character_id,
+                        instance_id,
+                        quantity,
+                        unit_price,
+                        listing_period,
+                        bundle_sale=bundle_sale,
+                    )
+                    inventory = fetch_character_inventory(conn, state.character_id)
+                    listings = fetch_listings(conn)
+                return self._json_response(
+                    {
+                        "ok": True,
+                        "gold": result["gold"],
+                        "fee": result["fee"],
+                        "listingId": result["listingId"],
+                        "inventory": inventory,
+                        "listings": listings,
+                    }
+                )
+            except (TypeError, ValueError) as exc:
+                return self._json_response({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            except sqlite3.Error as exc:
+                return self._json_response({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            except json.JSONDecodeError:
+                return self._json_response({"error": "Invalid JSON"}, status=HTTPStatus.BAD_REQUEST)
+
+        if path.startswith("/api/bazaar/quit/"):
+            state = self._session_state()
+            if not self._session_ready_for_game():
+                return self._json_response({"error": "Unauthorized"}, status=HTTPStatus.UNAUTHORIZED)
+
+            listing_id = path.rsplit("/", 1)[-1]
+            try:
+                from bazaar_sell import quit_bazaar_listing
+
+                with get_connection() as conn:
+                    result = quit_bazaar_listing(conn, state.character_id, int(listing_id))
+                    inventory = fetch_character_inventory(conn, state.character_id)
+                    admin_listings = fetch_my_listings(conn, state.character_id)
+                    market_listings = fetch_listings(conn)
+                return self._json_response(
+                    {
+                        "ok": True,
+                        "gold": result["gold"],
+                        "saleFee": result["saleFee"],
+                        "inventory": inventory,
+                        "listings": admin_listings,
+                        "marketListings": market_listings,
+                    }
+                )
+            except ValueError as exc:
+                return self._json_response({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            except sqlite3.Error as exc:
+                return self._json_response({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+
+        if path.startswith("/api/bazaar/receive/"):
+            state = self._session_state()
+            if not self._session_ready_for_game():
+                return self._json_response({"error": "Unauthorized"}, status=HTTPStatus.UNAUTHORIZED)
+
+            listing_id = path.rsplit("/", 1)[-1]
+            try:
+                from bazaar_sell import receive_bazaar_listing
+
+                with get_connection() as conn:
+                    result = receive_bazaar_listing(conn, state.character_id, int(listing_id))
+                    admin_listings = fetch_my_listings(conn, state.character_id)
+                    market_listings = fetch_listings(conn)
+                return self._json_response(
+                    {
+                        "ok": True,
+                        "gold": result["gold"],
+                        "saleFee": result["saleFee"],
+                        "receivedQuantity": result["receivedQuantity"],
+                        "totalAmount": result["totalAmount"],
+                        "listings": admin_listings,
+                        "marketListings": market_listings,
+                    }
+                )
+            except ValueError as exc:
+                return self._json_response({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            except sqlite3.Error as exc:
+                return self._json_response({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+
+        if path == "/api/inventory/use-merchant-medal":
+            state = self._session_state()
+            if not self._session_ready_for_game():
+                return self._json_response({"error": "Unauthorized"}, status=HTTPStatus.UNAUTHORIZED)
+            try:
+                from bazaar_sell import use_merchant_medal_from_inventory
+
+                payload = self._read_json()
+                instance_id = int(payload.get("instanceId"))
+                with get_connection() as conn:
+                    result = use_merchant_medal_from_inventory(
+                        conn,
+                        state.character_id,
+                        instance_id,
+                    )
+                    inventory = fetch_character_inventory(conn, state.character_id)
+                    character = get_character(conn, state.character_id)
+                return self._json_response(
+                    {
+                        "ok": True,
+                        "inventory": inventory,
+                        "gold": int(character["gold"]) if character else 0,
+                        "merchantMedal": result,
+                        "activatedItemName": result.get("activatedItemName"),
+                    }
+                )
+            except (TypeError, ValueError) as exc:
+                return self._json_response({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            except sqlite3.Error as exc:
                 return self._json_response({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
             except json.JSONDecodeError:
                 return self._json_response({"error": "Invalid JSON"}, status=HTTPStatus.BAD_REQUEST)
@@ -3227,29 +3633,50 @@ class BazaarHandler(SimpleHTTPRequestHandler):
     def _serve_static(self, file_path: Path | None) -> None:
         if file_path is None or not file_path.is_file():
             return self._serve_not_found()
-        return self._serve_file(file_path, content_type=static_content_type(file_path))
+        return self._serve_file(file_path, content_type=static_content_type(file_path), cacheable=True)
+
+    def _read_cached_file(self, file_path: Path) -> tuple[bytes, str]:
+        try:
+            return read_cached_static(file_path)
+        except OSError as exc:
+            raise FileNotFoundError(str(file_path)) from exc
 
     def _write_bytes(self, content: bytes) -> None:
         chunk_size = 256 * 1024
-        for offset in range(0, len(content), chunk_size):
-            self.wfile.write(content[offset : offset + chunk_size])
+        try:
+            for offset in range(0, len(content), chunk_size):
+                self.wfile.write(content[offset : offset + chunk_size])
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            return
 
     def _serve_file(
         self,
         file_path: Path,
         status: HTTPStatus = HTTPStatus.OK,
         content_type: str | None = None,
+        *,
+        cacheable: bool = False,
     ) -> None:
-        content = file_path.read_bytes()
-        if content_type is None:
-            content_type = (
-                "text/html; charset=utf-8"
-                if file_path.suffix == ".html"
-                else "application/octet-stream"
-            )
+        try:
+            if cacheable:
+                content, resolved_type = self._read_cached_file(file_path)
+                content_type = content_type or resolved_type
+            else:
+                content = file_path.read_bytes()
+                if content_type is None:
+                    content_type = (
+                        "text/html; charset=utf-8"
+                        if file_path.suffix == ".html"
+                        else "application/octet-stream"
+                    )
+        except OSError:
+            return self._serve_not_found()
+
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(content)))
+        if cacheable:
+            self.send_header("Cache-Control", "public, max-age=86400")
         self.end_headers()
         self._write_bytes(content)
 
@@ -3258,6 +3685,9 @@ class BazaarHandler(SimpleHTTPRequestHandler):
             content = vault.read_bytes(logical_name)
         except FileNotFoundError:
             self.send_error(HTTPStatus.NOT_FOUND)
+            return
+        except Exception:
+            self.send_error(HTTPStatus.INTERNAL_SERVER_ERROR)
             return
 
         content_type = ASSET_CONTENT_TYPES.get(
@@ -3298,6 +3728,57 @@ class BazaarHandler(SimpleHTTPRequestHandler):
     def log_message(self, format: str, *args) -> None:
         if str(args[0]).startswith(("GET /api/", "POST /api/")):
             super().log_message(format, *args)
+
+
+def migrate_character_slot_limit(conn: sqlite3.Connection) -> None:
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'characters'"
+    ).fetchone()
+    create_sql = row[0] if row else ""
+    if "BETWEEN 1 AND 3" not in create_sql:
+        return
+
+    columns = [
+        row[1]
+        for row in conn.execute("PRAGMA table_info(characters)").fetchall()
+    ]
+    column_sql = ", ".join(columns)
+    conn.executescript(
+        f"""
+        PRAGMA foreign_keys = OFF;
+        BEGIN;
+        CREATE TABLE characters_new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          account_id INTEGER NOT NULL,
+          name TEXT NOT NULL UNIQUE,
+          slot_index INTEGER NOT NULL,
+          gold INTEGER NOT NULL DEFAULT 0,
+          level INTEGER NOT NULL DEFAULT 1,
+          champion_level INTEGER NOT NULL DEFAULT 0,
+          job TEXT NOT NULL DEFAULT 'Adventurer',
+          job_level INTEGER NOT NULL DEFAULT 1,
+          gender TEXT NOT NULL DEFAULT 'male',
+          hair_style TEXT NOT NULL DEFAULT 'A',
+          hair_colour INTEGER NOT NULL DEFAULT 1,
+          skill_page INTEGER NOT NULL DEFAULT 1,
+          skill_slots_locked INTEGER NOT NULL DEFAULT 0,
+          skill_alt_hotkeys INTEGER NOT NULL DEFAULT 0,
+          IsGM INTEGER NOT NULL DEFAULT 0,
+          IsDeleted INTEGER NOT NULL DEFAULT 0,
+          FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE CASCADE,
+          UNIQUE(account_id, slot_index),
+          CHECK(slot_index BETWEEN 1 AND 99)
+        );
+        INSERT INTO characters_new ({column_sql})
+        SELECT {column_sql}
+        FROM characters;
+        DROP TABLE characters;
+        ALTER TABLE characters_new RENAME TO characters;
+        CREATE INDEX IF NOT EXISTS idx_characters_account ON characters(account_id);
+        COMMIT;
+        PRAGMA foreign_keys = ON;
+        """
+    )
 
 
 def migrate_database() -> None:
@@ -3349,6 +3830,13 @@ def migrate_database() -> None:
                 "UPDATE characters SET hair_colour = hair_colour + 1 "
                 "WHERE hair_colour BETWEEN 0 AND 9"
             )
+        migrate_character_slot_limit(conn)
+        from bazaar_sell import migrate_merchant_medals_table
+
+        migrate_merchant_medals_table(conn)
+        from bazaar_sell import migrate_bazaar_listing_columns
+
+        migrate_bazaar_listing_columns(conn)
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS character_inventory (
@@ -3428,41 +3916,49 @@ def open_browser() -> None:
 
 
 def main() -> None:
-    global LOGIN_PORT, CHANNEL_PORTS, login_server
+    global LOGIN_PORT, CHANNEL_PORTS
 
     ensure_ready()
     verify_routes()
+    warm_static_cache()
     LOGIN_PORT, CHANNEL_PORTS = load_server_config()
     load_game_config()
-    assert_port_available(LOGIN_PORT)
 
-    try:
-        login_server = BazaarHTTPServer((HOST, LOGIN_PORT), BazaarHandler)
-    except OSError as exc:
-        if getattr(exc, "winerror", None) == 10048 or exc.errno in (48, 98):
-            raise SystemExit(
-                f"Port {LOGIN_PORT} is already in use. Stop the other process then run: {server_run_hint()}"
-            ) from exc
-        raise
-
-    try:
-        start_game_channels()
-    except ValueError as exc:
-        raise SystemExit(str(exc)) from exc
-
-    print(f"Serving NosBazaar login on {HOST}:{LOGIN_PORT}")
-    print(f"Use this server ({server_run_hint()}), not py -m http.server")
-
-    login_thread = threading.Thread(target=login_server.serve_forever, daemon=True)
-    login_thread.start()
+    login_thread = start_servers()
 
     if getattr(sys, "frozen", False):
         threading.Timer(0.5, open_browser).start()
 
+    stop_event = threading.Event()
+    restart_event = threading.Event()
+    hotkey_thread: threading.Thread | None = None
+    if sys.stdin.isatty():
+        print("Press Ctrl+R to restart the server.")
+        hotkey_thread = threading.Thread(
+            target=_watch_restart_hotkey,
+            args=(restart_event, stop_event),
+            daemon=True,
+            name="restart-hotkey",
+        )
+        hotkey_thread.start()
+
     try:
-        while login_thread.is_alive():
-            login_thread.join(timeout=0.5)
+        while True:
+            if restart_event.is_set():
+                restart_event.clear()
+                login_thread = restart_servers()
+                continue
+
+            if not login_thread.is_alive():
+                break
+
+            login_thread.join(timeout=0.2)
     except KeyboardInterrupt:
+        pass
+    finally:
+        stop_event.set()
+        if hotkey_thread is not None:
+            hotkey_thread.join(timeout=1)
         shutdown_all_servers()
         login_thread.join(timeout=2)
 

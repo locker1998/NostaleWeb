@@ -362,9 +362,79 @@ def move_inventory_item(
         raise ValueError("Not enough inventory space to swap items.")
 
     temp_pocket, temp_slot = temp
-    _set_item_slot(conn, character_id, instance_id, temp_pocket, temp_slot)
-    _set_item_slot(conn, character_id, dest_instance_id, src_pocket, src_slot)
+    if (temp_pocket, temp_slot) in {(src_pocket, src_slot), (dest_pocket, dest_slot)}:
+        raise ValueError("Not enough inventory space to swap items.")
+
+    _set_item_slot(conn, character_id, dest_instance_id, temp_pocket, temp_slot)
     _set_item_slot(conn, character_id, instance_id, dest_pocket, dest_slot)
+    _set_item_slot(conn, character_id, dest_instance_id, src_pocket, src_slot)
+
+
+def split_inventory_item(
+    conn: sqlite3.Connection,
+    character_id: int,
+    instance_id: int,
+    dest_pocket_key: str,
+    dest_slot: int,
+    amount: int,
+) -> None:
+    if dest_slot < 0 or dest_slot >= POCKET_SLOT_COUNT:
+        raise ValueError("Invalid slot.")
+    if amount < 1:
+        raise ValueError("Invalid amount.")
+
+    source = _get_character_item_row(conn, character_id, instance_id)
+    if source is None:
+        raise ValueError("Item not found in inventory.")
+
+    if _is_listed_on_bazaar(conn, instance_id):
+        raise ValueError("Cannot split a listed bazaar item.")
+
+    src_qty = int(source["quantity"])
+    if src_qty <= 1:
+        raise ValueError("Stack is too small to split.")
+    if amount > src_qty:
+        raise ValueError("Amount exceeds stack size.")
+
+    dest_pocket = pocket_key_to_id(dest_pocket_key)
+    if not can_item_go_in_pocket(source, dest_pocket):
+        raise ValueError("Item cannot be placed in that pocket.")
+
+    dest_row = conn.execute(
+        """
+        SELECT item_instance_id
+        FROM character_inventory
+        WHERE character_id = ? AND pocket = ? AND slot = ?
+        """,
+        (character_id, dest_pocket, dest_slot),
+    ).fetchone()
+    if dest_row is not None:
+        raise ValueError("Destination slot is not empty.")
+
+    if amount == src_qty:
+        _set_item_slot(conn, character_id, instance_id, dest_pocket, dest_slot)
+        return
+
+    item_vnum = int(source["ItemVNum"])
+    remaining = src_qty - amount
+
+    conn.execute(
+        "UPDATE item_instances SET Quantity = ? WHERE id = ?",
+        (remaining, instance_id),
+    )
+
+    conn.execute(
+        "INSERT INTO item_instances (ItemVNum, Quantity) VALUES (?, ?)",
+        (item_vnum, amount),
+    )
+    new_instance_id = int(conn.execute("SELECT last_insert_rowid()").fetchone()[0])
+    conn.execute(
+        """
+        INSERT INTO character_inventory (character_id, pocket, slot, item_instance_id)
+        VALUES (?, ?, ?, ?)
+        """,
+        (character_id, dest_pocket, dest_slot, new_instance_id),
+    )
 
 
 def discard_inventory_item(

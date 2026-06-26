@@ -1,11 +1,13 @@
 const MAIN_BGM_SRC = "/assets/Milano%20Village.mp3";
 const MAIN_BGM_VOLUME = 0.45;
+const AUDIO_UNLOCK_KEY = "nosbazaar.audioUnlocked";
 
 let mainBgmAudio = null;
 let mainBgmStarted = false;
 let mainBgmStartScheduled = false;
 let bgmVolume = MAIN_BGM_VOLUME;
 let bgmMuted = false;
+
 function getMainBgmAudio() {
   if (!mainBgmAudio) {
     mainBgmAudio = new Audio(MAIN_BGM_SRC);
@@ -35,8 +37,25 @@ function setBgmMuted(muted) {
     audio.pause();
     return;
   }
-  void resumeMainBgm();
+  void startMainBgm();
 }
+
+function markAudioUnlocked() {
+  try {
+    sessionStorage.setItem(AUDIO_UNLOCK_KEY, "1");
+  } catch {
+    // Ignore storage errors.
+  }
+}
+
+function wasAudioUnlocked() {
+  try {
+    return sessionStorage.getItem(AUDIO_UNLOCK_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
 function shouldDelayForScreenFadeIn() {
   if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
     return false;
@@ -60,34 +79,54 @@ function getMainBgmStartDelayMs() {
   return fadeMs + holdMs;
 }
 
-async function startMainBgm() {
-  if (bgmMuted) {
-    return;
+function waitForBgmReady(audio) {
+  if (audio.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
+    return Promise.resolve();
   }
 
-  const audio = getMainBgmAudio();
-  try {
-    await audio.play();
-    mainBgmStarted = true;
-  } catch {
-    // Autoplay blocked until the player interacts.
-  }
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      audio.removeEventListener("canplaythrough", onReady);
+      audio.removeEventListener("canplay", onReady);
+      audio.removeEventListener("error", onError);
+    };
+    const onReady = () => {
+      cleanup();
+      resolve();
+    };
+    const onError = () => {
+      cleanup();
+      reject(new Error("BGM failed to load"));
+    };
+
+    audio.addEventListener("canplaythrough", onReady, { once: true });
+    audio.addEventListener("canplay", onReady, { once: true });
+    audio.addEventListener("error", onError, { once: true });
+    audio.load();
+  });
 }
 
-async function resumeMainBgm() {
-  if (bgmMuted) {
-    return;
+async function startMainBgm() {
+  if (bgmMuted || !document.body.classList.contains("page-main")) {
+    return false;
   }
 
   const audio = getMainBgmAudio();
   try {
+    await waitForBgmReady(audio);
     if (audio.paused) {
       await audio.play();
     }
     mainBgmStarted = true;
+    markAudioUnlocked();
+    return true;
   } catch {
-    // Playback may still be blocked until the player interacts.
+    return false;
   }
+}
+
+async function resumeMainBgm() {
+  return startMainBgm();
 }
 
 function scheduleMainBgmStart() {
@@ -96,17 +135,22 @@ function scheduleMainBgmStart() {
   }
   mainBgmStartScheduled = true;
 
-  window.setTimeout(() => {
+  const tryStart = () => {
     void startMainBgm();
-  }, getMainBgmStartDelayMs());
+  };
 
-  document.addEventListener(
-    "pointerdown",
-    () => {
-      void startMainBgm();
-    },
-    { capture: true, passive: true },
-  );
+  window.setTimeout(tryStart, getMainBgmStartDelayMs());
+
+  if (wasAudioUnlocked()) {
+    window.setTimeout(tryStart, getMainBgmStartDelayMs() + 120);
+  }
+
+  const onUserActivate = () => {
+    void startMainBgm();
+  };
+
+  document.addEventListener("pointerdown", onUserActivate, { capture: true, passive: true });
+  document.addEventListener("keydown", onUserActivate, { capture: true });
 }
 
 function initMainBgm() {
