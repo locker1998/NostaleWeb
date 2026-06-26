@@ -510,13 +510,17 @@ def quit_bazaar_listing(
     current_qty = int(row["quantity"])
     if current_qty <= 0:
         raise ValueError("Listing has no items to withdraw.")
-    if listed_qty > current_qty:
-        raise ValueError("Collect sold items before withdrawing.")
 
+    sold_qty = listed_qty - current_qty
     instance_id = int(row["item_instance_id"])
     unit_price = int(row["price"])
     has_medal = get_active_merchant_medal(conn, character_id) is not None
-    sale_fee = calculate_sale_fee(unit_price * current_qty, has_medal)
+
+    sold_gross = unit_price * sold_qty if sold_qty > 0 else 0
+    remaining_gross = unit_price * current_qty
+    sold_fee = calculate_sale_fee(sold_gross, has_medal) if sold_qty > 0 else 0
+    quit_fee = calculate_sale_fee(remaining_gross, has_medal) if current_qty > 0 else 0
+    received_gold = sold_gross - sold_fee
 
     character = conn.execute(
         "SELECT gold FROM characters WHERE id = ? AND COALESCE(IsDeleted, 0) = 0",
@@ -526,7 +530,7 @@ def quit_bazaar_listing(
         raise ValueError("Character not found.")
 
     gold = int(character["gold"])
-    if gold < sale_fee:
+    if gold + received_gold < quit_fee:
         raise ValueError("Not enough gold to pay the sale fee.")
 
     item = conn.execute("SELECT * FROM items WHERE ItemVNum = ?", (int(row["item_vnum"]),)).fetchone()
@@ -547,8 +551,8 @@ def quit_bazaar_listing(
         (character_id, pocket, slot, instance_id),
     )
 
-    new_gold = gold - sale_fee
-    if sale_fee:
+    new_gold = gold + received_gold - quit_fee
+    if received_gold or quit_fee:
         conn.execute(
             "UPDATE characters SET gold = ? WHERE id = ?",
             (new_gold, character_id),
@@ -556,7 +560,10 @@ def quit_bazaar_listing(
 
     return {
         "gold": new_gold,
-        "saleFee": sale_fee,
+        "saleFee": quit_fee,
+        "soldFee": sold_fee,
+        "receivedGold": received_gold,
+        "soldQuantity": sold_qty,
         "quantity": current_qty,
         "name": row["item_name"],
     }

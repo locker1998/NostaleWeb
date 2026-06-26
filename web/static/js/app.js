@@ -283,21 +283,21 @@ function getAdminListingState(item) {
     };
   }
 
+  if (soldCount > 0 && currentQty > 0) {
+    return {
+      status: isExpired ? "Deadline has expired" : "On Sale",
+      statusKey: isExpired ? "expired" : "on-sale",
+      rowClass: isExpired ? "is-admin-expired" : "",
+      actionMode: "partial",
+    };
+  }
+
   if (isExpired && currentQty > 0) {
     return {
       status: "Deadline has expired",
       statusKey: "expired",
       rowClass: "is-admin-expired",
       actionMode: "quit",
-    };
-  }
-
-  if (soldCount > 0) {
-    return {
-      status: "On Sale",
-      statusKey: "on-sale",
-      rowClass: "",
-      actionMode: "received",
     };
   }
 
@@ -367,6 +367,16 @@ function renderAdminRows() {
       });
       actions.appendChild(changeBtn);
 
+      const quitBtn = document.createElement("button");
+      quitBtn.type = "button";
+      quitBtn.className = "bazaar__btn bazaar__btn--buy";
+      quitBtn.textContent = "Quit";
+      quitBtn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        openQuitConfirmDialog(item);
+      });
+      actions.appendChild(quitBtn);
+    } else if (state.actionMode === "partial") {
       const quitBtn = document.createElement("button");
       quitBtn.type = "button";
       quitBtn.className = "bazaar__btn bazaar__btn--buy";
@@ -948,17 +958,28 @@ function calculateSaleFee(totalPrice) {
 function buildQuitConfirmSummary(item) {
   const { listedQty, currentQty, amountSold } = getAdminListingAmounts(item);
   const unitPrice = Number(item.price) || 0;
-  const saleFee = calculateSaleFee(unitPrice * currentQty);
-  const totalAmount = Math.max(0, unitPrice * amountSold - saleFee);
+  const soldGross = unitPrice * amountSold;
+  const remainingGross = unitPrice * currentQty;
+  const soldFee = amountSold > 0 ? calculateSaleFee(soldGross) : 0;
+  const quitFee = currentQty > 0 ? calculateSaleFee(remainingGross) : 0;
+  const receivedGold = Math.max(0, soldGross - soldFee);
 
   return {
-    saleFee,
-    totalAmount,
+    amountSold,
+    saleFee: quitFee,
+    receivedGold,
     detailRows: [
       { label: "Price per unit", value: `${formatGold(unitPrice)} Gold` },
       { label: "Quantity", value: formatAdminConfirmQuantity(listedQty, amountSold) },
-      { label: "Sale fee", value: `${formatGold(saleFee)} Gold` },
-      { label: "Total amount", value: `${formatGold(totalAmount)} Gold` },
+      ...(amountSold > 0
+        ? [
+            { label: "Sale fee", value: `${formatGold(soldFee)} Gold` },
+            { label: "Total amount", value: `${formatGold(receivedGold)} Gold` },
+          ]
+        : []),
+      ...(currentQty > 0
+        ? [{ label: "Withdrawal fee", value: `${formatGold(quitFee)} Gold` }]
+        : []),
     ],
   };
 }
@@ -986,7 +1007,8 @@ function openQuitConfirmDialog(item) {
   });
 
   okBtn.addEventListener("click", () => {
-    if (goldBalance < summary.saleFee) {
+    const requiredGold = Math.max(0, summary.saleFee - summary.receivedGold);
+    if (goldBalance < requiredGold) {
       closeBuyDialog();
       showBazaarInfoDialog("Not enough gold.");
       return;
@@ -1129,6 +1151,10 @@ function bindQuantityOutsideClose() {
   quantityOutsideHandler = (event) => {
     if (!quantityDialogState) return;
     if (quantityDialogState.el.contains(event.target)) return;
+    if (quantityDialogState.confirmOnOutsideClick && quantityDialogState.confirm) {
+      quantityDialogState.confirm();
+      return;
+    }
     closeQuantityDialog();
   };
 
@@ -1189,6 +1215,8 @@ function openQuantityDialog({
   minQuantity = 1,
   defaultQuantity = null,
   onConfirm,
+  onQuantityChange = null,
+  confirmOnOutsideClick = false,
   ariaLabel = "Select amount",
   useBodyOverlay = false,
 }) {
@@ -1268,6 +1296,7 @@ function openQuantityDialog({
       summary.textContent = getSummaryText(quantity);
       syncQuantityControlsWidth(summary, controls);
     }
+    void onQuantityChange?.(quantity);
   }
 
   function changeQuantity(delta) {
@@ -1301,7 +1330,7 @@ function openQuantityDialog({
   });
   el.addEventListener("mousedown", (e) => e.stopPropagation());
 
-  quantityDialogState = { el };
+  quantityDialogState = { el, confirmOnOutsideClick, confirm: confirmQuantity };
   syncQuantity(initialQuantity);
 
   requestAnimationFrame(() => {
@@ -1666,6 +1695,8 @@ function openSellQuantityDialog(entry, event) {
   const itemName = entry.item?.name || "Item";
   const maxQuantity = Math.max(1, Number(entry.quantity) || 1);
 
+  applySellListingDraft(entry, maxQuantity);
+
   openQuantityDialog({
     useBodyOverlay: true,
     clientX: event.clientX,
@@ -1675,6 +1706,10 @@ function openSellQuantityDialog(entry, event) {
     getSummaryText: (quantity) => formatSaleSummary(itemName, quantity),
     maxQuantity,
     defaultQuantity: maxQuantity,
+    confirmOnOutsideClick: true,
+    onQuantityChange: (quantity) => {
+      applySellListingDraft(entry, quantity);
+    },
     onConfirm: (quantity) => {
       applySellListingDraft(entry, quantity);
     },
