@@ -1,4 +1,16 @@
 /* Minimal lobby layout so pages render before the full bazaar.css finishes loading. */
+button,
+input[type="button"],
+input[type="submit"],
+input[type="reset"],
+a,
+label,
+select,
+summary,
+[role="button"] {
+  cursor: default;
+}
+
 html,
 body {
   margin: 0;

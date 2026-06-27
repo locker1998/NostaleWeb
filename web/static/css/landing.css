@@ -19,6 +19,18 @@
   box-sizing: border-box;
 }
 
+button,
+input[type="button"],
+input[type="submit"],
+input[type="reset"],
+a,
+label,
+select,
+summary,
+[role="button"] {
+  cursor: default;
+}
+
 html {
   scroll-behavior: smooth;
 }
@@ -94,7 +106,7 @@ body {
   border: none;
   background: transparent;
   font: inherit;
-  cursor: pointer;
+  cursor: default;
 }
 
 main {
@@ -170,7 +182,7 @@ main {
   font-size: 0.9375rem;
   font-weight: 600;
   text-decoration: none;
-  cursor: pointer;
+  cursor: default;
   transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
 }
 

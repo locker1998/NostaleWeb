@@ -67,7 +67,8 @@ from routing.router import (
 
 ROOT = app_root()
 vault = get_vault(ROOT / "data")
-HOST = "127.0.0.1"
+BIND_HOST = "127.0.0.1"
+PUBLIC_HOST = "127.0.0.1"
 CHANNELS_CONFIG_PATH = ROOT / "config" / "channels.json"
 GAME_CONFIG_PATH = ROOT / "config" / "game.json"
 AUTH_CONFIG_PATH = ROOT / "config" / "auth.json"
@@ -157,7 +158,7 @@ def warm_static_cache() -> None:
 def assert_port_available(port: int) -> None:
     probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
-        probe.bind((HOST, port))
+        probe.bind((BIND_HOST, port))
     except OSError as exc:
         if getattr(exc, "winerror", None) == 10048 or exc.errno in (48, 98):
             raise SystemExit(
@@ -193,12 +194,14 @@ class SessionState:
     username: str | None = None
 
 
-def load_server_config() -> tuple[int, dict[int, int]]:
+def load_server_config() -> tuple[int, dict[int, int], str, str]:
     default_login = 8080
     default_channels = {1: 8081, 2: 8082, 3: 8083, 4: 8084, 5: 8085}
+    default_bind_host = "127.0.0.1"
+    default_public_host = "127.0.0.1"
 
     if not CHANNELS_CONFIG_PATH.is_file():
-        return default_login, default_channels
+        return default_login, default_channels, default_bind_host, default_public_host
 
     try:
         data = json.loads(CHANNELS_CONFIG_PATH.read_text(encoding="utf-8"))
@@ -209,6 +212,8 @@ def load_server_config() -> tuple[int, dict[int, int]]:
         raise SystemExit(f"{CHANNELS_CONFIG_PATH} must be a JSON object")
 
     login_port = int(data.get("loginPort", default_login))
+    bind_host = str(data.get("bindHost", default_bind_host)).strip() or default_bind_host
+    public_host = str(data.get("publicHost", default_public_host)).strip() or default_public_host
     channels_raw = data.get("channels", default_channels)
 
     if isinstance(channels_raw, list):
@@ -242,7 +247,7 @@ def load_server_config() -> tuple[int, dict[int, int]]:
     if login_port in channel_ports.values():
         raise SystemExit("loginPort must not match any channel port")
 
-    return login_port, dict(sorted(channel_ports.items()))
+    return login_port, dict(sorted(channel_ports.items())), bind_host, public_host
 
 
 def load_game_config() -> None:
@@ -285,7 +290,7 @@ def load_game_config() -> None:
 
 
 def lobby_url(path: str) -> str:
-    return f"http://{HOST}:{LOGIN_PORT}{path}"
+    return f"http://{PUBLIC_HOST}:{LOGIN_PORT}{path}"
 
 
 def lobby_handoff_url(token: str, target_path: str = PLAY_SELECT_CHANNEL) -> str:
@@ -320,7 +325,7 @@ def port_for_channel(channel: int) -> int:
 
 def handoff_url(token: str, channel: int) -> str:
     port = port_for_channel(channel)
-    return f"http://{HOST}:{port}/api/session-handoff?token={token}"
+    return f"http://{PUBLIC_HOST}:{port}/api/session-handoff?token={token}"
 
 
 def hash_password(password: str) -> str:
@@ -1720,6 +1725,8 @@ ADMIN_CHAT_COMMANDS_HELP = [
     "$stopchannel [channel] - Stop game channel(s)",
     "$restartchannel [channel] - Restart game channel(s)",
     "$restartserver - Restart all running game channels",
+    "$setgm {playerName} - Grant GM rights to a character",
+    "$removegm {playerName} - Remove GM rights from a character",
 ]
 
 
@@ -1820,6 +1827,23 @@ def unmute_character_by_name(name: str) -> str:
     display_name = character["name"]
     chat_muted_until.pop(display_name.lower(), None)
     return f"{display_name} has been unmuted."
+
+
+def set_character_gm_by_name(name: str, is_gm: bool) -> str:
+    with get_connection() as conn:
+        character = get_character_by_name(conn, name)
+        if character is None:
+            raise ValueError(f"Character not found: {name}")
+
+        conn.execute(
+            "UPDATE characters SET IsGM = ? WHERE id = ?",
+            (int(is_gm), int(character["id"])),
+        )
+
+    display_name = character["name"]
+    if is_gm:
+        return f"{display_name} is now a GM."
+    return f"GM rights removed from {display_name}."
 
 
 def gm_create_item(character_id: int, item_vnum: int, amount: int) -> str:
@@ -2088,6 +2112,26 @@ def handle_chat_command(state: SessionState, body: str) -> list[dict[str, Any]]:
         try:
             result = restart_game_channels(None)
             return reply(format_channel_command_result("restart", result))
+        except ValueError as exc:
+            return reply(str(exc))
+
+    if command == "setgm":
+        if not is_admin:
+            return deny()
+        if not args:
+            return reply("Usage: $setgm {playerName}")
+        try:
+            return reply(set_character_gm_by_name(args[0], True))
+        except ValueError as exc:
+            return reply(str(exc))
+
+    if command == "removegm":
+        if not is_admin:
+            return deny()
+        if not args:
+            return reply("Usage: $removegm {playerName}")
+        try:
+            return reply(set_character_gm_by_name(args[0], False))
         except ValueError as exc:
             return reply(str(exc))
 
@@ -2392,7 +2436,7 @@ def start_game_channels(channel: int | None = None) -> dict[str, Any]:
                     continue
 
             port = port_for_channel(target_channel)
-            server = BazaarHTTPServer((HOST, port), BazaarHandler)
+            server = BazaarHTTPServer((BIND_HOST, port), BazaarHandler)
             thread = threading.Thread(target=server.serve_forever, daemon=True)
             thread.start()
 
@@ -2427,7 +2471,7 @@ def start_game_channels(channel: int | None = None) -> dict[str, Any]:
     channel_labels = ", ".join(
         f"CH{channel}:{CHANNEL_PORTS[channel]}" for channel in started_channels
     )
-    print(f"Game channels started on {HOST} ({channel_labels})")
+    print(f"Game channels started on {BIND_HOST} ({channel_labels})")
     return {
         "ok": True,
         "channelsRunning": True,
@@ -2507,7 +2551,7 @@ def start_servers() -> threading.Thread:
     assert_port_available(LOGIN_PORT)
 
     try:
-        login_server = BazaarHTTPServer((HOST, LOGIN_PORT), BazaarHandler)
+        login_server = BazaarHTTPServer((BIND_HOST, LOGIN_PORT), BazaarHandler)
     except OSError as exc:
         if getattr(exc, "winerror", None) == 10048 or exc.errno in (48, 98):
             raise SystemExit(
@@ -2520,7 +2564,7 @@ def start_servers() -> threading.Thread:
     except ValueError as exc:
         raise SystemExit(str(exc)) from exc
 
-    print(f"Serving NosBazaar login on {HOST}:{LOGIN_PORT}")
+    print(f"Serving NosBazaar login on {BIND_HOST}:{LOGIN_PORT} (public {PUBLIC_HOST})")
     print(f"Use this server ({server_run_hint()}), not py -m http.server")
 
     login_thread = threading.Thread(target=login_server.serve_forever, daemon=True)
@@ -4432,12 +4476,12 @@ def open_browser() -> None:
 
 
 def main() -> None:
-    global LOGIN_PORT, CHANNEL_PORTS
+    global LOGIN_PORT, CHANNEL_PORTS, BIND_HOST, PUBLIC_HOST
 
     ensure_ready()
     verify_routes()
     warm_static_cache()
-    LOGIN_PORT, CHANNEL_PORTS = load_server_config()
+    LOGIN_PORT, CHANNEL_PORTS, BIND_HOST, PUBLIC_HOST = load_server_config()
     load_game_config()
 
     login_thread = start_servers()

@@ -92,7 +92,7 @@
   color: #fff;
   font-size: 11px;
   line-height: 1;
-  cursor: pointer;
+  cursor: default;
 }
 
 .inventory-v2__tab-scroll:disabled {

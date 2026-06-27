@@ -105,7 +105,7 @@
   border-radius: 2px;
   background: linear-gradient(180deg, #4d5660 0%, #343b42 100%);
   color: #fff;
-  cursor: pointer;
+  cursor: default;
   flex-shrink: 0;
 }
 
@@ -127,7 +127,7 @@
   color: #fff;
   font: inherit;
   font-size: 10px;
-  cursor: pointer;
+  cursor: default;
 }
 
 .bazaar-v2__filter-btn--active {
@@ -205,7 +205,7 @@
   color: #fff;
   font-size: 11px;
   line-height: 1;
-  cursor: pointer;
+  cursor: default;
 }
 
 .bazaar-v2__filter-fields {
@@ -364,7 +364,7 @@
   color: #d8d8d8;
   font: inherit;
   font-size: 10px;
-  cursor: pointer;
+  cursor: default;
 }
 
 .bazaar-v2__panel-tab--active {
@@ -465,7 +465,7 @@
   color: #d8d8d8;
   font: inherit;
   font-size: 10px;
-  cursor: pointer;
+  cursor: default;
 }
 
 .bazaar-v2__sell-type-btn--active {
@@ -625,7 +625,7 @@
   padding: 0;
   border: 1px solid #2a2a2a;
   border-radius: 2px;
-  cursor: pointer;
+  cursor: default;
   flex: 0 0 auto;
 }
 

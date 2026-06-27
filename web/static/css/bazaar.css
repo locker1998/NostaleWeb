@@ -24,6 +24,18 @@
   -webkit-user-select: none;
 }
 
+button,
+input[type="button"],
+input[type="submit"],
+input[type="reset"],
+a,
+label,
+select,
+summary,
+[role="button"] {
+  cursor: default;
+}
+
 html,
 body {
   margin: 0;
@@ -4264,7 +4276,7 @@ body.play .scene--server-select > .server-select__leave {
 }
 
 .chatbox--open .chatbox__line--clickable {
-  cursor: pointer;
+  cursor: default;
 }
 
 .chatbox__composer {
