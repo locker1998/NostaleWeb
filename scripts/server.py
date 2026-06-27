@@ -1718,6 +1718,7 @@ GM_CHAT_COMMANDS_HELP = [
     "$unmute {playerName} - Unmute a player",
     "$createitem {ItemVNum} [amount] - Create items (default: 1)",
     "$gold {amount} - Set your gold amount",
+    "$listplayers [channel] - List online players (all channels by default)",
 ]
 
 ADMIN_CHAT_COMMANDS_HELP = [
@@ -1844,6 +1845,67 @@ def set_character_gm_by_name(name: str, is_gm: bool) -> str:
     if is_gm:
         return f"{display_name} is now a GM."
     return f"GM rights removed from {display_name}."
+
+
+def list_online_players(channel_filter: int | None = None) -> str:
+    if channel_filter is not None:
+        port_for_channel(channel_filter)
+
+    entries_by_channel: dict[int, list[str]] = {}
+
+    with get_connection() as conn:
+        for data in sessions.values():
+            channel = data.get("channel")
+            if channel is None:
+                continue
+            if data.get("account_id") is None and not data.get("is_superadmin"):
+                continue
+
+            channel_key = int(channel)
+            if channel_filter is not None and channel_key != channel_filter:
+                continue
+
+            character_id = data.get("character_id")
+            if character_id is not None:
+                character = get_character(conn, character_id)
+                if character is None:
+                    label = f"Character #{character_id} (missing)"
+                else:
+                    gm_tag = " [GM]" if character["IsGM"] else ""
+                    label = f"{character['name']}{gm_tag}"
+            elif data.get("is_superadmin"):
+                label = f"{data.get('username', 'superadmin')} (lobby)"
+            else:
+                account = conn.execute(
+                    """
+                    SELECT username
+                    FROM accounts
+                    WHERE id = ? AND COALESCE(IsDeleted, 0) = 0
+                    """,
+                    (int(data["account_id"]),),
+                ).fetchone()
+                username = account["username"] if account else f"Account #{data['account_id']}"
+                label = f"{username} (lobby)"
+
+            entries_by_channel.setdefault(channel_key, []).append(label)
+
+    channels_to_show = [channel_filter] if channel_filter is not None else sorted(CHANNEL_PORTS)
+
+    lines: list[str] = []
+    total = 0
+    for channel in channels_to_show:
+        players = sorted(entries_by_channel.get(channel, []), key=str.lower)
+        total += len(players)
+        lines.append(f"CH{channel} ({len(players)}):")
+        if players:
+            lines.extend(f"- {name}" for name in players)
+        else:
+            lines.append("- (none)")
+
+    if channel_filter is None:
+        lines.append(f"Total: {total} session(s)")
+
+    return "\n".join(lines)
 
 
 def gm_create_item(character_id: int, item_vnum: int, amount: int) -> str:
@@ -2134,6 +2196,21 @@ def handle_chat_command(state: SessionState, body: str) -> list[dict[str, Any]]:
             return reply(set_character_gm_by_name(args[0], False))
         except ValueError as exc:
             return reply(str(exc))
+
+    if command == "listplayers":
+        if not is_gm:
+            return deny()
+        channel = None
+        if args:
+            try:
+                channel = int(args[0])
+            except (TypeError, ValueError):
+                return reply("Channel must be a whole number.")
+            try:
+                port_for_channel(channel)
+            except ValueError:
+                return reply("Invalid channel.")
+        return reply(list_online_players(channel))
 
     return reply("Unknown command. Type $help for a list of commands.")
 
