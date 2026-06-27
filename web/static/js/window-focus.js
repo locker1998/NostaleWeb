@@ -5,11 +5,11 @@
     if (!target) return;
 
     const layer = target.closest(
-      ".bazaar-layer, .inventory-layer, .inventory-v2-layer, .game-config-layer, .skill-info-layer, .inventory-additional-layer",
+      ".bazaar-layer, .bazaar-v2-layer, .inventory-layer, .inventory-v2-layer, .game-config-layer, .skill-info-layer, .inventory-additional-layer",
     );
     const root =
       target.closest(
-        ".bazaar--floating, .game-config, .inventory--floating, .inventory--additional, .inventory-v2, .skill-info",
+        ".bazaar--floating, .bazaar-v2, .game-config, .inventory--floating, .inventory--additional, .inventory-v2, .skill-info",
       ) || target;
 
     topZ += 1;
@@ -23,7 +23,7 @@
 
   function initFloatingWindowFocus() {
     const roots = document.querySelectorAll(
-      "#bazaar-root, #game-config-root, #inventory-root, #inventory-v2-root, .inventory--additional, .skill-info",
+      "#bazaar-root, #bazaar-v2-root, #game-config-root, #inventory-root, #inventory-v2-root, .inventory--additional, .skill-info",
     );
 
     roots.forEach((root) => {

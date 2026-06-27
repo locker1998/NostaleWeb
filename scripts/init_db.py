@@ -117,9 +117,30 @@ CREATE TABLE IF NOT EXISTS bazaar (
   listing_period INTEGER NOT NULL DEFAULT 30,
   bundle_sale INTEGER NOT NULL DEFAULT 0,
   listed_quantity INTEGER,
+  listing_type TEXT NOT NULL DEFAULT 'fixed',
+  starting_price INTEGER,
+  instant_price INTEGER,
+  bid_increment INTEGER,
+  current_bid INTEGER NOT NULL DEFAULT 0,
+  current_bidder_id INTEGER,
+  anonymous_seller INTEGER NOT NULL DEFAULT 0,
+  anonymous_buyer INTEGER NOT NULL DEFAULT 0,
   FOREIGN KEY (character_id) REFERENCES characters(id),
   FOREIGN KEY (item_instance_id) REFERENCES item_instances(id)
 );
+
+CREATE TABLE IF NOT EXISTS bazaar_bids (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  bazaar_id INTEGER NOT NULL,
+  bidder_id INTEGER NOT NULL,
+  amount INTEGER NOT NULL,
+  is_anonymous INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY (bazaar_id) REFERENCES bazaar(id) ON DELETE CASCADE,
+  FOREIGN KEY (bidder_id) REFERENCES characters(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_bazaar_bids_bazaar ON bazaar_bids(bazaar_id, id DESC);
 
 CREATE INDEX IF NOT EXISTS idx_bazaar_character ON bazaar(character_id);
 CREATE INDEX IF NOT EXISTS idx_bazaar_instance ON bazaar(item_instance_id);

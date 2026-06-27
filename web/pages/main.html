@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="/static/css/screen-transition.css" />
   <link rel="stylesheet" href="/static/css/bazaar.css" />
   <link rel="stylesheet" href="/static/css/inventory-v2.css" />
+  <link rel="stylesheet" href="/static/css/bazaar-v2.css" />
   <script src="/static/js/screen-transition.js"></script>
 </head>
 <body class="play page-main">
@@ -30,7 +31,7 @@
           id="new-bazaar-toggle-btn"
           role="switch"
           aria-checked="true"
-          aria-label="Use new NosBazaar inventory"
+          aria-label="Use new NosBazaar UI"
         >
           <span class="feature-toggle__label feature-toggle__label--classic">Classic</span>
           <span class="feature-toggle__track" aria-hidden="true">
@@ -367,13 +368,283 @@
       </div>
     </div>
 
+    <div class="bazaar-v2-layer replaceable-window-layer" id="bazaar-v2-layer" data-replaceable="bazaar" hidden>
+      <div class="bazaar-v2" id="bazaar-v2-root" role="dialog" aria-label="NosBazaar">
+        <header class="bazaar-v2__titlebar" id="bazaar-v2-titlebar">
+          <span class="bazaar-v2__title" id="bazaar-v2-window-title">NosBazaar</span>
+          <button type="button" class="bazaar__close" id="bazaar-v2-close" aria-label="Close"></button>
+        </header>
+
+        <div class="bazaar-v2__workspace">
+          <div class="bazaar-v2__split">
+            <div class="bazaar-v2__listings-zone">
+              <div class="bazaar-v2__search-bar">
+                <input
+                  type="text"
+                  class="bazaar-v2__search-input"
+                  id="bazaar-v2-search-input"
+                  placeholder="Search items..."
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+                <button type="button" class="bazaar-v2__search-btn" id="bazaar-v2-search-btn" aria-label="Search">
+                  <svg class="bazaar-v2__search-btn-icon" viewBox="0 0 14 14" aria-hidden="true">
+                    <circle cx="6" cy="6" r="4.25" fill="none" stroke="currentColor" stroke-width="1.4" />
+                    <path d="M9.2 9.2L12.5 12.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+                  </svg>
+                </button>
+                <button type="button" class="bazaar-v2__filter-btn" id="bazaar-v2-filter-open">Filters</button>
+              </div>
+
+              <div class="bazaar-v2__filter-backdrop" id="bazaar-v2-filter-backdrop" aria-hidden="true"></div>
+              <aside class="bazaar-v2__filter-drawer" id="bazaar-v2-filter-drawer" aria-label="Listing filters" aria-hidden="true">
+                <div class="bazaar-v2__filter-drawer-head">
+                  <span class="bazaar-v2__filter-drawer-title">Filters</span>
+                  <button type="button" class="bazaar-v2__filter-close" id="bazaar-v2-filter-close" aria-label="Close filters">&#10005;</button>
+                </div>
+                <div class="bazaar-v2__filter-fields">
+                  <label class="bazaar-v2__filter-label" for="bazaar-v2-filter-name">Name</label>
+                  <input type="text" class="bazaar__input bazaar-v2__filter-input" id="bazaar-v2-filter-name" autocomplete="off" />
+
+                  <label class="bazaar-v2__filter-label" for="bazaar-v2-filter-category">Category</label>
+                  <select class="bazaar__input bazaar__select bazaar-v2__filter-select" id="bazaar-v2-filter-category"></select>
+
+                  <label class="bazaar-v2__filter-label" for="bazaar-v2-filter-level">Level</label>
+                  <select class="bazaar__input bazaar__select bazaar-v2__filter-select" id="bazaar-v2-filter-level"></select>
+
+                  <label class="bazaar-v2__filter-label" for="bazaar-v2-filter-rarity">Rarity</label>
+                  <select class="bazaar__input bazaar__select bazaar-v2__filter-select" id="bazaar-v2-filter-rarity"></select>
+
+                  <label class="bazaar-v2__filter-label" for="bazaar-v2-filter-dynamic">Class / Type</label>
+                  <select class="bazaar__input bazaar__select bazaar-v2__filter-select" id="bazaar-v2-filter-dynamic"></select>
+
+                  <label class="bazaar-v2__filter-label" for="bazaar-v2-filter-upgrade">Upgrade</label>
+                  <select class="bazaar__input bazaar__select bazaar-v2__filter-select" id="bazaar-v2-filter-upgrade"></select>
+
+                  <label class="bazaar-v2__filter-label" for="bazaar-v2-filter-sort">Sort by</label>
+                  <select class="bazaar__input bazaar__select bazaar-v2__filter-select" id="bazaar-v2-filter-sort"></select>
+                </div>
+                <div class="bazaar-v2__filter-actions">
+                  <button type="button" class="bazaar__btn bazaar-v2__filter-reset" id="bazaar-v2-filter-reset">Reset</button>
+                  <button type="button" class="bazaar__btn bazaar__btn--search bazaar-v2__filter-apply" id="bazaar-v2-filter-apply">Search</button>
+                </div>
+              </aside>
+
+              <div class="bazaar__listing bazaar-v2__market-listing">
+                <div class="bazaar__list-header">
+                  <table class="bazaar__list-table">
+                    <colgroup>
+                      <col class="col-name" />
+                      <col class="col-amount" />
+                      <col class="col-price" />
+                    </colgroup>
+                    <thead>
+                      <tr>
+                        <th class="col-name">Item</th>
+                        <th class="col-amount">Quantity</th>
+                        <th class="col-price">Price</th>
+                      </tr>
+                    </thead>
+                  </table>
+                </div>
+                <div class="bazaar__list-body bazaar-v2__listings-scroll" id="bazaar-v2-listings-scroll">
+                  <table class="bazaar__list-table">
+                    <colgroup>
+                      <col class="col-name" />
+                      <col class="col-amount" />
+                      <col class="col-price" />
+                    </colgroup>
+                    <tbody id="bazaar-v2-listings-list"></tbody>
+                  </table>
+                </div>
+              </div>
+
+              <footer class="bazaar-v2__footer">
+                <div class="bazaar-v2__footer-medal" id="bazaar-v2-footer-medal" hidden>
+                  <img
+                    class="bazaar-v2__footer-medal-icon"
+                    id="bazaar-v2-footer-medal-icon"
+                    alt=""
+                    draggable="false"
+                  />
+                  <span class="bazaar-v2__footer-medal-time" id="bazaar-v2-footer-medal-time"></span>
+                </div>
+                <div class="bazaar__gold bazaar-v2__gold">
+                  <span class="bazaar__gold-prefix" aria-hidden="true">G</span>
+                  <input type="text" class="bazaar__gold-input" id="bazaar-v2-gold" readonly value="" />
+                </div>
+              </footer>
+            </div>
+
+            <aside class="bazaar-v2__panel" aria-label="NosBazaar panel">
+              <div class="bazaar-v2__panel-toolbar">
+              <nav class="bazaar-v2__panel-tabs" aria-label="Panel tabs">
+                <button type="button" class="bazaar-v2__panel-tab bazaar-v2__panel-tab--active" data-bazaar-v2-panel="detail">Detail</button>
+                <button type="button" class="bazaar-v2__panel-tab" data-bazaar-v2-panel="list">List</button>
+                <button type="button" class="bazaar-v2__panel-tab" data-bazaar-v2-panel="admin">Administration</button>
+              </nav>
+              </div>
+
+              <div class="bazaar-v2__panel-body">
+                <section class="bazaar-v2__panel-section bazaar-v2__panel-section--active" data-bazaar-v2-panel="detail" id="bazaar-v2-panel-detail">
+                  <p class="bazaar-v2__panel-empty">Select an item to view details.</p>
+                  <div class="bazaar-v2__detail-content" id="bazaar-v2-detail-content" hidden></div>
+                </section>
+
+                <section class="bazaar-v2__panel-section" data-bazaar-v2-panel="list" id="bazaar-v2-panel-list" hidden>
+                  <div class="bazaar-v2__sell-type">
+                    <button type="button" class="bazaar-v2__sell-type-btn bazaar-v2__sell-type-btn--active" data-sell-type="fixed">Normal</button>
+                    <button type="button" class="bazaar-v2__sell-type-btn" data-sell-type="auction">Auction</button>
+                  </div>
+                  <div class="bazaar-v2__sell-form">
+                    <div class="bazaar-v2__sell-drop">
+                      <div class="inventory__slot bazaar-v2__sell-slot" id="bazaar-v2-sell-slot" aria-label="Listing slot"></div>
+                      <p class="bazaar-v2__sell-hint">Drag an item from inventory to list it.</p>
+                    </div>
+
+                    <div class="bazaar-v2__sell-row" id="bazaar-v2-sell-quantity-row">
+                      <label class="bazaar-v2__sell-label" for="bazaar-v2-sell-quantity">Quantity</label>
+                      <span class="bazaar-v2__sell-value" id="bazaar-v2-sell-quantity">0 Piece</span>
+                    </div>
+                    <div class="bazaar-v2__sell-row">
+                      <label class="bazaar-v2__sell-label bazaar-v2__sell-label--required" for="bazaar-v2-sell-period">Listing period</label>
+                      <select id="bazaar-v2-sell-period" class="bazaar__input bazaar__select bazaar-v2__sell-field">
+                        <option value="1">1 Day(s)</option>
+                        <option value="7">7 Day(s)</option>
+                        <option value="15">15 Day(s)</option>
+                        <option value="30">30 Day(s)</option>
+                      </select>
+                    </div>
+
+                    <div class="bazaar-v2__sell-row">
+                      <label class="bazaar-v2__sell-label bazaar-v2__sell-label--required" for="bazaar-v2-sell-anonymous-seller">Anonymous Seller</label>
+                      <select id="bazaar-v2-sell-anonymous-seller" class="bazaar__input bazaar__select bazaar-v2__sell-field">
+                        <option value="no" selected>No</option>
+                        <option value="yes">Yes</option>
+                      </select>
+                    </div>
+
+                    <div class="bazaar-v2__sell-fixed-fields" id="bazaar-v2-sell-fixed-fields">
+                      <div class="bazaar-v2__sell-row">
+                        <label class="bazaar-v2__sell-label bazaar-v2__sell-label--required" for="bazaar-v2-sell-method">Setting method</label>
+                        <select id="bazaar-v2-sell-method" class="bazaar__input bazaar__select bazaar-v2__sell-field">
+                          <option value="individual" selected>Individual sale</option>
+                          <option value="bundle">Bundle sale</option>
+                        </select>
+                      </div>
+                      <div class="bazaar-v2__sell-row">
+                        <label class="bazaar-v2__sell-label bazaar-v2__sell-label--required" for="bazaar-v2-sell-price">Price per unit</label>
+                        <input type="text" id="bazaar-v2-sell-price" class="bazaar__input bazaar-v2__sell-field" inputmode="numeric" autocomplete="off" />
+                      </div>
+                    </div>
+
+                    <div class="bazaar-v2__sell-auction-fields" id="bazaar-v2-sell-auction-fields" hidden>
+                      <div class="bazaar-v2__sell-row">
+                        <label class="bazaar-v2__sell-label bazaar-v2__sell-label--required" for="bazaar-v2-sell-start-price">Starting Price</label>
+                        <input type="text" id="bazaar-v2-sell-start-price" class="bazaar__input bazaar-v2__sell-field" inputmode="numeric" autocomplete="off" />
+                      </div>
+                      <div class="bazaar-v2__sell-row">
+                        <label class="bazaar-v2__sell-label" for="bazaar-v2-sell-instant-price">Instant Price</label>
+                        <input type="text" id="bazaar-v2-sell-instant-price" class="bazaar__input bazaar-v2__sell-field" inputmode="numeric" autocomplete="off" />
+                      </div>
+                      <div class="bazaar-v2__sell-row">
+                        <label class="bazaar-v2__sell-label bazaar-v2__sell-label--required" for="bazaar-v2-sell-increment">Increment</label>
+                        <input type="text" id="bazaar-v2-sell-increment" class="bazaar__input bazaar-v2__sell-field" inputmode="numeric" autocomplete="off" />
+                      </div>
+                      <div class="bazaar-v2__sell-row">
+                        <label class="bazaar-v2__sell-label bazaar-v2__sell-label--required" for="bazaar-v2-sell-anonymous-buyer">Anonymous Buyer</label>
+                        <select id="bazaar-v2-sell-anonymous-buyer" class="bazaar__input bazaar__select bazaar-v2__sell-field">
+                          <option value="no" selected>No</option>
+                          <option value="yes">Yes</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div class="bazaar-v2__sell-summary">
+                      <div class="bazaar-v2__sell-summary-row">
+                        <span class="bazaar-v2__sell-summary-label">Total price</span>
+                        <strong class="bazaar-v2__sell-summary-value" id="bazaar-v2-sell-total">0 Gold</strong>
+                      </div>
+                      <div class="bazaar-v2__sell-summary-row">
+                        <span class="bazaar-v2__sell-summary-label">Listing fee</span>
+                        <strong class="bazaar-v2__sell-summary-value" id="bazaar-v2-sell-fee">50 Gold</strong>
+                      </div>
+                    </div>
+                    <div class="bazaar-v2__sell-submit-wrap">
+                      <button type="button" class="bazaar__btn bazaar__btn--list bazaar-v2__sell-submit" id="bazaar-v2-sell-submit">List</button>
+                    </div>
+                  </div>
+                </section>
+
+                <section class="bazaar-v2__panel-section" data-bazaar-v2-panel="admin" id="bazaar-v2-panel-admin" hidden>
+                  <div class="bazaar__listing bazaar__listing--admin bazaar-v2__admin-listing">
+                    <div class="bazaar__list-header">
+                      <table class="bazaar__list-table">
+                        <colgroup>
+                          <col class="col-name" />
+                          <col class="col-amount" />
+                          <col class="col-price" />
+                          <col class="col-admin-actions" />
+                        </colgroup>
+                        <thead>
+                          <tr>
+                            <th class="col-name">Item</th>
+                            <th class="col-amount">Amount</th>
+                            <th class="col-price">Price</th>
+                            <th class="col-admin-actions"></th>
+                          </tr>
+                        </thead>
+                      </table>
+                    </div>
+                    <div class="bazaar__list-body bazaar-v2__admin-scroll" id="bazaar-v2-admin-scroll">
+                      <table class="bazaar__list-table">
+                        <colgroup>
+                          <col class="col-name" />
+                          <col class="col-amount" />
+                          <col class="col-price" />
+                          <col class="col-admin-actions" />
+                        </colgroup>
+                        <tbody id="bazaar-v2-admin-list"></tbody>
+                      </table>
+                    </div>
+                  </div>
+                </section>
+              </div>
+            </aside>
+          </div>
+        </div>
+      <div class="bazaar-v2__bid-layer" id="bazaar-v2-bid-layer" hidden>
+        <div class="bazaar-v2__bid-dialog" role="dialog" aria-labelledby="bazaar-v2-bid-title">
+          <h3 class="bazaar-v2__bid-title" id="bazaar-v2-bid-title">Place bid</h3>
+          <label class="bazaar-v2__bid-label" for="bazaar-v2-bid-amount">Price</label>
+          <input type="text" class="bazaar__input bazaar-v2__bid-amount" id="bazaar-v2-bid-amount" inputmode="numeric" autocomplete="off" />
+          <label class="bazaar-v2__bid-anonymous" id="bazaar-v2-bid-anonymous-wrap">
+            <input type="checkbox" id="bazaar-v2-bid-anonymous" />
+            Anonymous
+          </label>
+          <div class="bazaar-v2__bid-actions">
+            <button type="button" class="bazaar__btn bazaar__btn--buy" id="bazaar-v2-bid-confirm">Confirm</button>
+            <button type="button" class="bazaar__btn bazaar__btn--buy" id="bazaar-v2-bid-cancel">Cancel</button>
+          </div>
+        </div>
+      </div>
+      </div>
+    </div>
+
     <div class="inventory-v2-layer replaceable-window-layer" id="inventory-v2-layer" data-replaceable="inventory" hidden>
       <div class="inventory-v2" id="inventory-v2-root" role="dialog" aria-label="Inventory">
         <header class="inventory-v2__titlebar" id="inventory-v2-titlebar">
           <span class="inventory-v2__title">Inventory</span>
           <div class="inventory-v2__search">
-            <label class="inventory-v2__search-label" for="inventory-v2-search">Search:</label>
-            <input type="text" class="inventory-v2__search-input" id="inventory-v2-search" autocomplete="off" spellcheck="false" />
+            <input
+              type="text"
+              class="inventory-v2__search-input"
+              id="inventory-v2-search"
+              placeholder="Search..."
+              aria-label="Search inventory"
+              autocomplete="off"
+              spellcheck="false"
+            />
           </div>
           <button type="button" class="bazaar__close" id="inventory-v2-close" aria-label="Close"></button>
         </header>
@@ -415,6 +686,13 @@
         </footer>
       </div>
     </div>
+
+    <nav class="inventory-v2-context-menu" id="inventory-v2-context-menu" role="menu" aria-label="Item actions" hidden>
+      <button type="button" class="inventory-v2-context-menu__item" data-action="use" role="menuitem">Use</button>
+      <button type="button" class="inventory-v2-context-menu__item" data-action="look-bazaar" role="menuitem">Look on Bazaar</button>
+      <button type="button" class="inventory-v2-context-menu__item" data-action="sell-bazaar" role="menuitem">Sell on Bazaar</button>
+      <button type="button" class="inventory-v2-context-menu__item" data-action="properties" role="menuitem">Properties</button>
+    </nav>
 
     <div class="inventory-layer replaceable-window-layer" id="inventory-layer" data-replaceable="inventory" hidden>
       <div class="inventory inventory--floating bazaar" id="inventory-root" role="dialog" aria-label="Inventory">
@@ -562,6 +840,8 @@
   <script src="/static/js/main-bgm.js"></script>
   <script src="/static/js/replaceable-windows.js"></script>
   <script src="/static/js/app.js"></script>
+  <script src="/static/js/bazaar-v2.js"></script>
+  <script src="/static/js/bazaar-router.js"></script>
   <script src="/static/js/session-flow.js"></script>
   <script src="/static/js/chat.js"></script>
   <script src="/static/js/window-focus.js"></script>

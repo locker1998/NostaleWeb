@@ -776,6 +776,7 @@ def get_connection():
     conn = sqlite3.connect(vault.db_work_path(), timeout=5)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
+    changes_before = conn.total_changes
     try:
         yield conn
     except Exception:
@@ -783,7 +784,8 @@ def get_connection():
         raise
     else:
         conn.commit()
-        vault.persist_db()
+        if conn.total_changes > changes_before:
+            vault.persist_db()
     finally:
         conn.close()
 
@@ -957,36 +959,76 @@ def fetch_character_inventory(conn: sqlite3.Connection, character_id: int) -> di
     }
 
 
-def fetch_listings(conn: sqlite3.Connection) -> list[dict]:
-    from bazaar_sell import format_listing_days_remaining
+def fetch_listings(conn: sqlite3.Connection, viewer_character_id: int | None = None) -> list[dict]:
+    from bazaar_sell import finalize_due_auctions, format_listing_days_remaining, _get_escrow_held
 
+    finalize_due_auctions(conn)
     expiry = listing_expiry_sql()
     rows = conn.execute(
         f"""
         SELECT
           b.id,
+          b.character_id AS seller_character_id,
           b.price AS listing_price,
           b.list_date,
+          b.listing_type,
+          b.starting_price,
+          b.instant_price,
+          b.bid_increment,
+          b.current_bid,
+          b.anonymous_seller,
+          b.anonymous_buyer,
+          b.expires_at,
           COALESCE(b.listed_quantity, ii.Quantity) AS listed_quantity,
           (julianday({expiry}) - julianday('now')) AS days_left,
           ii.id AS item_instance_id,
           ii.Quantity AS quantity,
           c.name AS seller,
+          bidder.name AS highest_bidder,
+          latest_bid.is_anonymous AS highest_bid_anonymous,
           {ITEM_SELECT_SQL}
         FROM bazaar b
         JOIN item_instances ii ON b.item_instance_id = ii.id
         JOIN items i ON ii.ItemVNum = i.ItemVNum
         JOIN characters c ON b.character_id = c.id
+        LEFT JOIN characters bidder ON b.current_bidder_id = bidder.id
+        LEFT JOIN bazaar_bids latest_bid ON latest_bid.id = (
+          SELECT id FROM bazaar_bids
+          WHERE bazaar_id = b.id
+          ORDER BY id DESC
+          LIMIT 1
+        )
         WHERE julianday({expiry}) >= julianday('now')
           AND ii.Quantity > 0
+          AND (
+            COALESCE(b.listing_type, 'fixed') != 'auction'
+            OR COALESCE(b.auction_state, 'active') = 'active'
+          )
         ORDER BY b.id
         """
     ).fetchall()
 
-    return [_listing_row_to_dict(row, format_listing_days_remaining) for row in rows]
+    listings = [_listing_row_to_dict(row, format_listing_days_remaining) for row in rows]
+    if viewer_character_id is not None:
+        for payload in listings:
+            if payload.get("isAuction"):
+                payload["myEscrowHeld"] = _get_escrow_held(conn, int(payload["id"]), int(viewer_character_id))
+    return listings
 
 
 def _listing_row_to_dict(row: sqlite3.Row, format_days) -> dict:
+    from bazaar_sell import (
+        _display_bidder_name,
+        _display_seller_name,
+        auction_current_offer,
+        auction_has_winner,
+        auction_starting_price,
+        fixed_listing_sold_quantity,
+        format_auction_time_remaining,
+        is_auction_listing_row,
+        seconds_until_expiry,
+    )
+
     days_left = float(row["days_left"])
     is_expired = bool(row["is_expired"]) if "is_expired" in row.keys() else days_left < 0
     listed_quantity = (
@@ -994,7 +1036,9 @@ def _listing_row_to_dict(row: sqlite3.Row, format_days) -> dict:
         if "listed_quantity" in row.keys() and row["listed_quantity"] is not None
         else int(row["quantity"])
     )
-    return {
+    is_auction = is_auction_listing_row(row)
+    seller_name = _display_seller_name(row, row["seller"])
+    payload = {
         "id": str(row["id"]),
         "name": row["name"],
         "itemVNum": row["ItemVNum"],
@@ -1004,44 +1048,279 @@ def _listing_row_to_dict(row: sqlite3.Row, format_days) -> dict:
         "listedQuantity": listed_quantity,
         "price": row["listing_price"],
         "days": format_days(days_left) if not is_expired else 0,
-        "seller": row["seller"],
+        "seller": seller_name,
+        "sellerCharacterId": int(row["seller_character_id"])
+        if "seller_character_id" in row.keys() and row["seller_character_id"] is not None
+        else None,
         "category": row["category"],
         "listDate": row["list_date"],
         "itemInstanceId": row["item_instance_id"],
         "isExpired": is_expired,
         "item": item_to_dict(row),
+        "isAuction": is_auction,
     }
+    if is_auction:
+        starting_price = auction_starting_price(row)
+        current_offer = auction_current_offer(row)
+        expires_at = row["expires_at"] if "expires_at" in row.keys() else None
+        seconds_remaining = (
+            seconds_until_expiry(str(expires_at)) if expires_at else max(0, int(days_left * 86400))
+        )
+        payload.update(
+            {
+                "startingPrice": starting_price,
+                "currentOffer": current_offer,
+                "currentBid": int(row["current_bid"] or 0) if "current_bid" in row.keys() else 0,
+                "hasWinner": auction_has_winner(row),
+                "instantPrice": int(row["instant_price"])
+                if "instant_price" in row.keys() and row["instant_price"] is not None
+                else None,
+                "bidIncrement": int(row["bid_increment"] or 0) if "bid_increment" in row.keys() else 0,
+                "highestBidder": _display_bidder_name(
+                    row,
+                    row["highest_bidder"] if "highest_bidder" in row.keys() else None,
+                    bid_is_anonymous=bool(row["highest_bid_anonymous"])
+                    if "highest_bid_anonymous" in row.keys() and row["highest_bid_anonymous"] is not None
+                    else False,
+                ),
+                "allowsAnonymousBuyer": bool(int(row["anonymous_buyer"] or 0))
+                if "anonymous_buyer" in row.keys()
+                else False,
+                "expiresAt": str(expires_at) if expires_at else None,
+                "secondsRemaining": seconds_remaining,
+                "timeRemaining": format_auction_time_remaining(seconds_remaining),
+            }
+        )
+    return payload
 
 
-def fetch_my_listings(conn: sqlite3.Connection, character_id: int) -> list[dict]:
-    from bazaar_sell import format_listing_days_remaining
+def _admin_payload_from_row(row: sqlite3.Row, format_days) -> dict:
+    from bazaar_sell import _auction_state, fixed_listing_sold_quantity
 
+    payload = _listing_row_to_dict(row, format_days)
+    if "bid_count" in row.keys():
+        payload["hasBids"] = int(row["bid_count"] or 0) > 0
+    if "auction_state" in row.keys():
+        payload["auctionState"] = _auction_state(row)
+        payload["sellerCollected"] = bool(int(row["seller_collected"] or 0))
+        payload["buyerClaimed"] = bool(int(row["buyer_claimed"] or 0))
+    if "escrow_held" in row.keys():
+        payload["escrowHeld"] = int(row["escrow_held"] or 0)
+    if "stored_listed_quantity" in row.keys():
+        payload["soldQuantity"] = fixed_listing_sold_quantity(row)
+    elif "quantity" in row.keys():
+        payload["soldQuantity"] = fixed_listing_sold_quantity(row)
+    return payload
+
+
+def fetch_bazaar_admin_entries(conn: sqlite3.Connection, character_id: int) -> list[dict]:
+    from bazaar_sell import (
+        AUCTION_STATE_ACTIVE,
+        AUCTION_STATE_ENDED,
+        AUCTION_STATE_SOLD,
+        LISTING_TYPE_AUCTION,
+        finalize_due_auctions,
+        format_listing_days_remaining,
+    )
+
+    finalize_due_auctions(conn)
     expiry = listing_expiry_sql()
-    rows = conn.execute(
+    seller_rows = conn.execute(
         f"""
         SELECT
           b.id,
+          b.character_id AS seller_character_id,
           b.price AS listing_price,
           b.list_date,
           b.listing_period,
+          b.listing_type,
+          b.starting_price,
+          b.instant_price,
+          b.bid_increment,
+          b.current_bid,
+          b.current_bidder_id,
+          b.anonymous_seller,
+          b.anonymous_buyer,
+          b.expires_at,
+          b.auction_state,
+          b.seller_collected,
+          b.buyer_claimed,
+          b.listed_quantity AS stored_listed_quantity,
           COALESCE(b.listed_quantity, ii.Quantity) AS listed_quantity,
           (julianday({expiry}) - julianday('now')) AS days_left,
           CASE WHEN julianday({expiry}) < julianday('now') THEN 1 ELSE 0 END AS is_expired,
           ii.id AS item_instance_id,
           ii.Quantity AS quantity,
           c.name AS seller,
+          bidder.name AS highest_bidder,
+          latest_bid.is_anonymous AS highest_bid_anonymous,
+          (SELECT COUNT(*) FROM bazaar_bids bb WHERE bb.bazaar_id = b.id) AS bid_count,
           {ITEM_SELECT_SQL}
         FROM bazaar b
         JOIN item_instances ii ON b.item_instance_id = ii.id
         JOIN items i ON ii.ItemVNum = i.ItemVNum
         JOIN characters c ON b.character_id = c.id
+        LEFT JOIN characters bidder ON b.current_bidder_id = bidder.id
+        LEFT JOIN bazaar_bids latest_bid ON latest_bid.id = (
+          SELECT id FROM bazaar_bids
+          WHERE bazaar_id = b.id
+          ORDER BY id DESC
+          LIMIT 1
+        )
         WHERE b.character_id = ?
+          AND NOT (
+            COALESCE(b.listing_type, 'fixed') = 'auction'
+            AND COALESCE(b.seller_collected, 0) = 1
+          )
         ORDER BY b.id DESC
         """,
         (character_id,),
     ).fetchall()
 
-    return [_listing_row_to_dict(row, format_listing_days_remaining) for row in rows]
+    entries: list[dict] = []
+    for row in seller_rows:
+        payload = _admin_payload_from_row(row, format_listing_days_remaining)
+        payload["adminRole"] = "seller"
+        entries.append(payload)
+
+    winner_rows = conn.execute(
+        f"""
+        SELECT
+          b.id,
+          b.character_id AS seller_character_id,
+          b.price AS listing_price,
+          b.list_date,
+          b.listing_period,
+          b.listing_type,
+          b.starting_price,
+          b.instant_price,
+          b.bid_increment,
+          b.current_bid,
+          b.current_bidder_id,
+          b.anonymous_seller,
+          b.anonymous_buyer,
+          b.expires_at,
+          b.auction_state,
+          b.seller_collected,
+          b.buyer_claimed,
+          b.listed_quantity AS stored_listed_quantity,
+          COALESCE(b.listed_quantity, ii.Quantity) AS listed_quantity,
+          (julianday({expiry}) - julianday('now')) AS days_left,
+          CASE WHEN julianday({expiry}) < julianday('now') THEN 1 ELSE 0 END AS is_expired,
+          ii.id AS item_instance_id,
+          ii.Quantity AS quantity,
+          c.name AS seller,
+          bidder.name AS highest_bidder,
+          latest_bid.is_anonymous AS highest_bid_anonymous,
+          (SELECT COUNT(*) FROM bazaar_bids bb WHERE bb.bazaar_id = b.id) AS bid_count,
+          {ITEM_SELECT_SQL}
+        FROM bazaar b
+        JOIN item_instances ii ON b.item_instance_id = ii.id
+        JOIN items i ON ii.ItemVNum = i.ItemVNum
+        JOIN characters c ON b.character_id = c.id
+        LEFT JOIN characters bidder ON b.current_bidder_id = bidder.id
+        LEFT JOIN bazaar_bids latest_bid ON latest_bid.id = (
+          SELECT id FROM bazaar_bids
+          WHERE bazaar_id = b.id
+          ORDER BY id DESC
+          LIMIT 1
+        )
+        WHERE b.listing_type = ?
+          AND b.current_bidder_id = ?
+          AND COALESCE(b.buyer_claimed, 0) = 0
+          AND ii.Quantity > 0
+          AND COALESCE(b.auction_state, ?) IN (?, ?)
+          AND b.character_id != ?
+        ORDER BY b.id DESC
+        """,
+        (
+            LISTING_TYPE_AUCTION,
+            character_id,
+            AUCTION_STATE_ACTIVE,
+            AUCTION_STATE_ENDED,
+            AUCTION_STATE_SOLD,
+            character_id,
+        ),
+    ).fetchall()
+    for row in winner_rows:
+        payload = _admin_payload_from_row(row, format_listing_days_remaining)
+        payload["adminRole"] = "winner"
+        entries.append(payload)
+
+    refund_rows = conn.execute(
+        f"""
+        SELECT
+          b.id,
+          b.character_id AS seller_character_id,
+          b.price AS listing_price,
+          b.list_date,
+          b.listing_period,
+          b.listing_type,
+          b.starting_price,
+          b.instant_price,
+          b.bid_increment,
+          b.current_bid,
+          b.current_bidder_id,
+          b.anonymous_seller,
+          b.anonymous_buyer,
+          b.expires_at,
+          b.auction_state,
+          b.seller_collected,
+          b.buyer_claimed,
+          b.listed_quantity AS stored_listed_quantity,
+          COALESCE(b.listed_quantity, ii.Quantity) AS listed_quantity,
+          (julianday({expiry}) - julianday('now')) AS days_left,
+          CASE WHEN julianday({expiry}) < julianday('now') THEN 1 ELSE 0 END AS is_expired,
+          ii.id AS item_instance_id,
+          ii.Quantity AS quantity,
+          c.name AS seller,
+          bidder.name AS highest_bidder,
+          latest_bid.is_anonymous AS highest_bid_anonymous,
+          be.amount_held AS escrow_held,
+          (SELECT COUNT(*) FROM bazaar_bids bb WHERE bb.bazaar_id = b.id) AS bid_count,
+          {ITEM_SELECT_SQL}
+        FROM bazaar_bid_escrow be
+        JOIN bazaar b ON b.id = be.bazaar_id
+        JOIN item_instances ii ON b.item_instance_id = ii.id
+        JOIN items i ON ii.ItemVNum = i.ItemVNum
+        JOIN characters c ON b.character_id = c.id
+        LEFT JOIN characters bidder ON b.current_bidder_id = bidder.id
+        LEFT JOIN bazaar_bids latest_bid ON latest_bid.id = (
+          SELECT id FROM bazaar_bids
+          WHERE bazaar_id = b.id
+          ORDER BY id DESC
+          LIMIT 1
+        )
+        WHERE be.character_id = ?
+          AND be.refunded = 0
+          AND be.amount_held > 0
+          AND b.listing_type = ?
+          AND COALESCE(b.current_bidder_id, 0) != ?
+          AND (
+            COALESCE(b.auction_state, ?) IN (?, ?)
+            OR julianday({expiry}) < julianday('now')
+          )
+        ORDER BY b.id DESC
+        """,
+        (
+            character_id,
+            LISTING_TYPE_AUCTION,
+            character_id,
+            AUCTION_STATE_ACTIVE,
+            AUCTION_STATE_ENDED,
+            AUCTION_STATE_SOLD,
+        ),
+    ).fetchall()
+    for row in refund_rows:
+        payload = _admin_payload_from_row(row, format_listing_days_remaining)
+        payload["adminRole"] = "refund"
+        entries.append(payload)
+
+    return entries
+
+
+def fetch_my_listings(conn: sqlite3.Connection, character_id: int) -> list[dict]:
+    return fetch_bazaar_admin_entries(conn, character_id)
 
 
 def fetch_skills(conn: sqlite3.Connection) -> list[dict]:
@@ -1223,7 +1502,7 @@ def get_bootstrap(character_id: int) -> dict:
         if character is None:
             raise ValueError("Character not found")
 
-        listings = fetch_listings(conn)
+        listings = fetch_listings(conn, character_id)
         merchant_medal = get_active_merchant_medal(conn, character_id)
 
     return {
@@ -2304,6 +2583,7 @@ def buy_listing(listing_id: int, buyer_id: int, quantity: int = 1) -> dict:
               b.price,
               b.character_id AS seller_id,
               b.bundle_sale,
+              b.listing_type,
               i.name,
               i.ItemVNum AS item_vnum,
               ii.id AS instance_id,
@@ -2319,6 +2599,9 @@ def buy_listing(listing_id: int, buyer_id: int, quantity: int = 1) -> dict:
 
         if listing is None:
             raise ValueError("Listing not found or expired")
+
+        if str(listing["listing_type"] or "fixed") == "auction":
+            raise ValueError("Use buy-now for auction listings.")
 
         if listing["seller_id"] == buyer_id:
             raise ValueError("Cannot buy your own listing")
@@ -2343,6 +2626,11 @@ def buy_listing(listing_id: int, buyer_id: int, quantity: int = 1) -> dict:
         seller = get_character(conn, listing["seller_id"])
         if seller is None:
             raise ValueError("Seller not found")
+
+        conn.execute(
+            "UPDATE bazaar SET listed_quantity = COALESCE(listed_quantity, ?) WHERE id = ?",
+            (available, listing_id),
+        )
 
         buyer_gold = buyer["gold"] - total_price
 
@@ -2891,11 +3179,15 @@ class BazaarHandler(SimpleHTTPRequestHandler):
             )
 
         if path == "/api/health":
+            try:
+                db_ready = vault.exists("nosbazaar.db")
+            except (json.JSONDecodeError, OSError):
+                db_ready = True
             return self._json_response(
                 {
                     "ok": True,
                     "server": "nosbazaar",
-                    "db": vault.exists("nosbazaar.db"),
+                    "db": db_ready,
                     "loginPort": LOGIN_PORT,
                     "loginUrl": lobby_url(PLAY_LOGIN),
                     "channelsRunning": channels_are_running(),
@@ -2937,8 +3229,9 @@ class BazaarHandler(SimpleHTTPRequestHandler):
         if path == "/api/listings":
             if not self._session_ready_for_game():
                 return self._json_response({"error": "Unauthorized"}, status=HTTPStatus.UNAUTHORIZED)
+            state = self._session_state()
             with get_connection() as conn:
-                return self._json_response({"listings": fetch_listings(conn)})
+                return self._json_response({"listings": fetch_listings(conn, state.character_id)})
 
         if path == "/api/bazaar/my-listings":
             state = self._session_state()
@@ -2984,6 +3277,22 @@ class BazaarHandler(SimpleHTTPRequestHandler):
                 return self._json_response({"error": str(exc)}, status=HTTPStatus.UNAUTHORIZED)
             messages = chat_messages_since(sender["name"], sender["channel"], since_id)
             return self._json_response({"messages": messages, "latestId": latest_chat_id()})
+
+        if path.startswith("/api/bazaar/") and path.endswith("/bids"):
+            state = self._session_state()
+            if not self._session_ready_for_game():
+                return self._json_response({"error": "Unauthorized"}, status=HTTPStatus.UNAUTHORIZED)
+            listing_id = path[len("/api/bazaar/") : -len("/bids")]
+            try:
+                from bazaar_sell import fetch_auction_bids
+
+                with get_connection() as conn:
+                    bids = fetch_auction_bids(conn, int(listing_id))
+                return self._json_response({"ok": True, "bids": bids})
+            except ValueError as exc:
+                return self._json_response({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            except sqlite3.Error as exc:
+                return self._json_response({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
 
         return self._serve_not_found()
 
@@ -3421,26 +3730,47 @@ class BazaarHandler(SimpleHTTPRequestHandler):
             if not self._session_ready_for_game():
                 return self._json_response({"error": "Unauthorized"}, status=HTTPStatus.UNAUTHORIZED)
             try:
-                from bazaar_sell import create_bazaar_listing
+                from bazaar_sell import create_auction_listing, create_bazaar_listing
 
                 payload = self._read_json()
                 instance_id = int(payload.get("instanceId"))
                 quantity = int(payload.get("quantity"))
-                unit_price = int(payload.get("unitPrice"))
                 listing_period = int(payload.get("listingPeriod"))
-                bundle_sale = bool(payload.get("bundleSale"))
+                listing_type = str(payload.get("listingType") or "fixed").lower()
+                anonymous_seller = bool(payload.get("anonymousSeller"))
                 with get_connection() as conn:
-                    result = create_bazaar_listing(
-                        conn,
-                        state.character_id,
-                        instance_id,
-                        quantity,
-                        unit_price,
-                        listing_period,
-                        bundle_sale=bundle_sale,
-                    )
+                    if listing_type == "auction":
+                        starting_price = int(payload.get("startingPrice"))
+                        bid_increment = int(payload.get("bidIncrement"))
+                        instant_raw = payload.get("instantPrice")
+                        instant_price = int(instant_raw) if instant_raw not in (None, "", 0) else None
+                        anonymous_buyer = bool(payload.get("anonymousBuyer"))
+                        result = create_auction_listing(
+                            conn,
+                            state.character_id,
+                            instance_id,
+                            starting_price,
+                            listing_period,
+                            bid_increment,
+                            instant_price=instant_price,
+                            anonymous_seller=anonymous_seller,
+                            anonymous_buyer=anonymous_buyer,
+                        )
+                    else:
+                        unit_price = int(payload.get("unitPrice"))
+                        bundle_sale = bool(payload.get("bundleSale"))
+                        result = create_bazaar_listing(
+                            conn,
+                            state.character_id,
+                            instance_id,
+                            quantity,
+                            unit_price,
+                            listing_period,
+                            bundle_sale=bundle_sale,
+                            anonymous_seller=anonymous_seller,
+                        )
                     inventory = fetch_character_inventory(conn, state.character_id)
-                    listings = fetch_listings(conn)
+                    listings = fetch_listings(conn, state.character_id)
                 return self._json_response(
                     {
                         "ok": True,
@@ -3458,6 +3788,145 @@ class BazaarHandler(SimpleHTTPRequestHandler):
             except json.JSONDecodeError:
                 return self._json_response({"error": "Invalid JSON"}, status=HTTPStatus.BAD_REQUEST)
 
+        if path.startswith("/api/bazaar/bid/"):
+            state = self._session_state()
+            if not self._session_ready_for_game():
+                return self._json_response({"error": "Unauthorized"}, status=HTTPStatus.UNAUTHORIZED)
+            listing_id = path.rsplit("/", 1)[-1]
+            try:
+                from bazaar_sell import place_auction_bid
+
+                payload = self._read_json()
+                amount = int(payload.get("amount"))
+                anonymous = bool(payload.get("anonymous"))
+                with get_connection() as conn:
+                    result = place_auction_bid(
+                        conn,
+                        state.character_id,
+                        int(listing_id),
+                        amount,
+                        anonymous=anonymous,
+                    )
+                    listings = fetch_listings(conn, state.character_id)
+                    admin_listings = fetch_my_listings(conn, state.character_id)
+                return self._json_response(
+                    {
+                        "ok": True,
+                        "gold": result["gold"],
+                        "amount": result["amount"],
+                        "deltaPaid": result["deltaPaid"],
+                        "escrowHeld": result["escrowHeld"],
+                        "listings": listings,
+                        "adminListings": admin_listings,
+                    }
+                )
+            except (TypeError, ValueError) as exc:
+                return self._json_response({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            except sqlite3.Error as exc:
+                return self._json_response({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            except json.JSONDecodeError:
+                return self._json_response({"error": "Invalid JSON"}, status=HTTPStatus.BAD_REQUEST)
+
+        if path.startswith("/api/bazaar/buy-now/"):
+            state = self._session_state()
+            if not self._session_ready_for_game():
+                return self._json_response({"error": "Unauthorized"}, status=HTTPStatus.UNAUTHORIZED)
+            listing_id = path.rsplit("/", 1)[-1]
+            try:
+                from bazaar_sell import buy_auction_instantly
+
+                with get_connection() as conn:
+                    result = buy_auction_instantly(conn, state.character_id, int(listing_id))
+                    listings = fetch_listings(conn, state.character_id)
+                    admin_listings = fetch_my_listings(conn, state.character_id)
+                return self._json_response(
+                    {
+                        "ok": True,
+                        "gold": result["gold"],
+                        "name": result["name"],
+                        "quantity": result["quantity"],
+                        "remaining": result["remaining"],
+                        "listings": listings,
+                        "adminListings": admin_listings,
+                    }
+                )
+            except ValueError as exc:
+                return self._json_response({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            except sqlite3.Error as exc:
+                return self._json_response({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+
+        if path.startswith("/api/bazaar/claim-item/"):
+            state = self._session_state()
+            if not self._session_ready_for_game():
+                return self._json_response({"error": "Unauthorized"}, status=HTTPStatus.UNAUTHORIZED)
+
+            listing_id = path.rsplit("/", 1)[-1]
+            try:
+                from bazaar_sell import claim_auction_item
+
+                with get_connection() as conn:
+                    result = claim_auction_item(conn, state.character_id, int(listing_id))
+                    inventory = fetch_character_inventory(conn, state.character_id)
+                    admin_listings = fetch_my_listings(conn, state.character_id)
+                    market_listings = fetch_listings(conn, state.character_id)
+                return self._json_response(
+                    {
+                        "ok": True,
+                        "gold": result["gold"],
+                        "name": result["name"],
+                        "inventory": inventory,
+                        "listings": admin_listings,
+                        "marketListings": market_listings,
+                    }
+                )
+            except ValueError as exc:
+                return self._json_response({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            except sqlite3.Error as exc:
+                return self._json_response({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+
+        if path.startswith("/api/bazaar/claim-refund/"):
+            state = self._session_state()
+            if not self._session_ready_for_game():
+                return self._json_response({"error": "Unauthorized"}, status=HTTPStatus.UNAUTHORIZED)
+
+            listing_id = path.rsplit("/", 1)[-1]
+            try:
+                from bazaar_sell import claim_auction_refund
+
+                with get_connection() as conn:
+                    result = claim_auction_refund(conn, state.character_id, int(listing_id))
+                    admin_listings = fetch_my_listings(conn, state.character_id)
+                    market_listings = fetch_listings(conn, state.character_id)
+                return self._json_response(
+                    {
+                        "ok": True,
+                        "gold": result["gold"],
+                        "refundAmount": result["refundAmount"],
+                        "listings": admin_listings,
+                        "marketListings": market_listings,
+                    }
+                )
+            except ValueError as exc:
+                return self._json_response({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            except sqlite3.Error as exc:
+                return self._json_response({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+
+        if path.startswith("/api/bazaar/") and path.endswith("/bids"):
+            state = self._session_state()
+            if not self._session_ready_for_game():
+                return self._json_response({"error": "Unauthorized"}, status=HTTPStatus.UNAUTHORIZED)
+            listing_id = path[len("/api/bazaar/") : -len("/bids")]
+            try:
+                from bazaar_sell import fetch_auction_bids
+
+                with get_connection() as conn:
+                    bids = fetch_auction_bids(conn, int(listing_id))
+                return self._json_response({"ok": True, "bids": bids})
+            except ValueError as exc:
+                return self._json_response({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+            except sqlite3.Error as exc:
+                return self._json_response({"error": str(exc)}, status=HTTPStatus.BAD_REQUEST)
+
         if path.startswith("/api/bazaar/quit/"):
             state = self._session_state()
             if not self._session_ready_for_game():
@@ -3471,7 +3940,7 @@ class BazaarHandler(SimpleHTTPRequestHandler):
                     result = quit_bazaar_listing(conn, state.character_id, int(listing_id))
                     inventory = fetch_character_inventory(conn, state.character_id)
                     admin_listings = fetch_my_listings(conn, state.character_id)
-                    market_listings = fetch_listings(conn)
+                    market_listings = fetch_listings(conn, state.character_id)
                 return self._json_response(
                     {
                         "ok": True,
@@ -3499,7 +3968,7 @@ class BazaarHandler(SimpleHTTPRequestHandler):
                 with get_connection() as conn:
                     result = receive_bazaar_listing(conn, state.character_id, int(listing_id))
                     admin_listings = fetch_my_listings(conn, state.character_id)
-                    market_listings = fetch_listings(conn)
+                    market_listings = fetch_listings(conn, state.character_id)
                 return self._json_response(
                     {
                         "ok": True,
@@ -3535,7 +4004,7 @@ class BazaarHandler(SimpleHTTPRequestHandler):
                         unit_price,
                     )
                     admin_listings = fetch_my_listings(conn, state.character_id)
-                    market_listings = fetch_listings(conn)
+                    market_listings = fetch_listings(conn, state.character_id)
                 return self._json_response(
                     {
                         "ok": True,
@@ -3881,6 +4350,9 @@ def migrate_database() -> None:
         from bazaar_sell import migrate_bazaar_listing_columns
 
         migrate_bazaar_listing_columns(conn)
+        from bazaar_sell import migrate_bazaar_auction_columns
+
+        migrate_bazaar_auction_columns(conn)
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS character_inventory (

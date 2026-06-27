@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import sys
 import tempfile
+import threading
 from base64 import urlsafe_b64encode
 from pathlib import Path
 
@@ -25,25 +27,35 @@ class DataVault:
     def __init__(self, data_dir: Path) -> None:
         self.data_dir = data_dir
         self._db_work_path: Path | None = None
+        self._lock = threading.RLock()
 
     def toc_path(self) -> Path:
         return self.data_dir / TOC_NAME
 
     def has_toc(self) -> bool:
-        return self.toc_path().exists()
+        with self._lock:
+            return self.toc_path().exists()
 
     def load_toc(self) -> dict:
-        raw = self.toc_path().read_bytes()
-        try:
-            payload = _toc_fernet().decrypt(raw)
-        except InvalidToken:
-            payload = raw
-        return json.loads(payload.decode("utf-8"))
+        with self._lock:
+            raw = self.toc_path().read_bytes()
+            if not raw:
+                raise json.JSONDecodeError("Empty table of contents", "", 0)
+            try:
+                payload = _toc_fernet().decrypt(raw)
+            except InvalidToken:
+                payload = raw
+            return json.loads(payload.decode("utf-8"))
 
     def save_toc(self, toc: dict) -> None:
-        self.data_dir.mkdir(parents=True, exist_ok=True)
-        payload = (json.dumps(toc, indent=2) + "\n").encode("utf-8")
-        self.toc_path().write_bytes(_toc_fernet().encrypt(payload))
+        with self._lock:
+            self.data_dir.mkdir(parents=True, exist_ok=True)
+            payload = (json.dumps(toc, indent=2) + "\n").encode("utf-8")
+            encrypted = _toc_fernet().encrypt(payload)
+            target = self.toc_path()
+            temp_path = target.with_suffix(".tmp")
+            temp_path.write_bytes(encrypted)
+            os.replace(temp_path, target)
 
     def _entry_for_name(self, toc: dict, logical_name: str) -> tuple[str, dict] | None:
         for file_id, entry in toc.get("entries", {}).items():
@@ -65,37 +77,43 @@ class DataVault:
         return key.encode("utf-8") if isinstance(key, str) else key
 
     def exists(self, logical_name: str) -> bool:
-        if not self.has_toc():
-            return False
-        return self._entry_for_name(self.load_toc(), logical_name) is not None
+        with self._lock:
+            if not self.toc_path().exists():
+                return False
+            return self._entry_for_name(self.load_toc(), logical_name) is not None
 
     def read_bytes(self, logical_name: str) -> bytes:
-        toc = self.load_toc()
-        found = self._entry_for_name(toc, logical_name)
-        if not found:
-            raise FileNotFoundError(logical_name)
-        file_id, entry = found
-        blob = (self.data_dir / file_id).read_bytes()
-        return Fernet(self._fernet_key(entry)).decrypt(blob)
+        with self._lock:
+            toc = self.load_toc()
+            found = self._entry_for_name(toc, logical_name)
+            if not found:
+                raise FileNotFoundError(logical_name)
+            file_id, entry = found
+            blob = (self.data_dir / file_id).read_bytes()
+            return Fernet(self._fernet_key(entry)).decrypt(blob)
 
     def write_bytes(self, logical_name: str, data: bytes) -> None:
-        toc = self.load_toc() if self.has_toc() else {"version": 1, "entries": {}}
-        found = self._entry_for_name(toc, logical_name)
-        if found:
-            file_id, entry = found
-            key = self._fernet_key(entry)
-        else:
-            file_id = self._next_file_id(toc)
-            key = Fernet.generate_key()
-            toc["entries"][file_id] = {
-                "name": logical_name,
-                "key": key.decode("utf-8"),
-            }
+        with self._lock:
+            toc = self.load_toc() if self.toc_path().exists() else {"version": 1, "entries": {}}
+            found = self._entry_for_name(toc, logical_name)
+            if found:
+                file_id, entry = found
+                key = self._fernet_key(entry)
+            else:
+                file_id = self._next_file_id(toc)
+                key = Fernet.generate_key()
+                toc["entries"][file_id] = {
+                    "name": logical_name,
+                    "key": key.decode("utf-8"),
+                }
 
-        encrypted = Fernet(key).encrypt(data)
-        self.data_dir.mkdir(parents=True, exist_ok=True)
-        (self.data_dir / file_id).write_bytes(encrypted)
-        self.save_toc(toc)
+            encrypted = Fernet(key).encrypt(data)
+            self.data_dir.mkdir(parents=True, exist_ok=True)
+            blob_path = self.data_dir / file_id
+            temp_path = blob_path.with_suffix(".tmp")
+            temp_path.write_bytes(encrypted)
+            os.replace(temp_path, blob_path)
+            self.save_toc(toc)
 
     def read_text(self, logical_name: str) -> str:
         return self.read_bytes(logical_name).decode("utf-8")
@@ -152,26 +170,27 @@ class DataVault:
         return packed
 
     def remove_logical(self, logical_name: str) -> bool:
-        if not self.has_toc():
-            return False
+        with self._lock:
+            if not self.toc_path().exists():
+                return False
 
-        toc = self.load_toc()
-        found = self._entry_for_name(toc, logical_name)
-        if not found:
-            return False
+            toc = self.load_toc()
+            found = self._entry_for_name(toc, logical_name)
+            if not found:
+                return False
 
-        file_id, _entry = found
-        blob_path = self.data_dir / file_id
-        if blob_path.is_file():
-            blob_path.unlink()
+            file_id, _entry = found
+            blob_path = self.data_dir / file_id
+            if blob_path.is_file():
+                blob_path.unlink()
 
-        del toc["entries"][file_id]
-        self.save_toc(toc)
+            del toc["entries"][file_id]
+            self.save_toc(toc)
 
-        if logical_name == "nosbazaar.db":
-            self._db_work_path = None
+            if logical_name == "nosbazaar.db":
+                self._db_work_path = None
 
-        return True
+            return True
 
     def db_work_path(self) -> Path:
         if self._db_work_path is None:

@@ -52,6 +52,7 @@
   const tabsPrevBtn = document.getElementById("inventory-v2-tabs-prev");
   const tabsNextBtn = document.getElementById("inventory-v2-tabs-next");
   const discardBtn = document.getElementById("inventory-v2-discard");
+  const contextMenuEl = document.getElementById("inventory-v2-context-menu");
   const sceneEl = document.querySelector(".scene--main");
 
   let inventoryData = null;
@@ -62,6 +63,8 @@
   let dragGhostEl = null;
   let dropHighlightEl = null;
   let sellSlotDropHighlight = null;
+  let contextMenuState = null;
+  let contextMenuOutsideHandler = null;
 
   function layoutFor(pocketKey) {
     return POCKET_LAYOUTS[pocketKey] || POCKET_LAYOUTS.equip;
@@ -185,6 +188,132 @@
     return payload;
   }
 
+  function isItemUsable(entry) {
+    const itemVNum = Number(entry?.item?.itemVNum);
+    return MERCHANT_MEDAL_VNUMS.has(itemVNum);
+  }
+
+  async function tryUseItem(entry) {
+    if (!isItemUsable(entry)) return false;
+    try {
+      const payload = await useMerchantMedal(entry.instanceId);
+      if (payload.activatedItemName) {
+        window.ChatUI?.appendAppMessage?.(
+          `The ${payload.activatedItemName} effect has been activated!`,
+        );
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function openItemProperties(entry, iconUrl) {
+    window.MainUI?.openItemInfo?.({
+      name: entry.item?.name,
+      icon: iconUrl,
+      item: entry.item,
+    });
+  }
+
+  function closeContextMenu() {
+    if (!contextMenuEl) return;
+    contextMenuEl.hidden = true;
+    contextMenuState = null;
+    if (contextMenuOutsideHandler) {
+      document.removeEventListener("mousedown", contextMenuOutsideHandler);
+      document.removeEventListener("keydown", contextMenuOutsideHandler);
+      contextMenuOutsideHandler = null;
+    }
+  }
+
+  function positionContextMenu(clientX, clientY) {
+    if (!contextMenuEl) return;
+    const pad = 8;
+    contextMenuEl.hidden = false;
+    const rect = contextMenuEl.getBoundingClientRect();
+    let left = clientX;
+    let top = clientY;
+    if (left + rect.width > window.innerWidth - pad) {
+      left = window.innerWidth - rect.width - pad;
+    }
+    if (top + rect.height > window.innerHeight - pad) {
+      top = window.innerHeight - rect.height - pad;
+    }
+    contextMenuEl.style.left = `${Math.max(pad, left)}px`;
+    contextMenuEl.style.top = `${Math.max(pad, top)}px`;
+  }
+
+  function handleContextMenuAction(action) {
+    const state = contextMenuState;
+    closeContextMenu();
+    if (!state?.entry) return;
+
+    if (action === "use") {
+      void tryUseItem(state.entry);
+      return;
+    }
+    if (action === "look-bazaar") {
+      window.NosBazaar?.searchByItemName?.(state.entry.item?.name || "");
+      return;
+    }
+    if (action === "sell-bazaar") {
+      window.NosBazaar?.quickSellFromInventory?.(state.entry, state.event);
+      return;
+    }
+    if (action === "properties") {
+      openItemProperties(state.entry, state.iconUrl);
+    }
+  }
+
+  function openItemContextMenu(event, entry, iconUrl) {
+    if (!contextMenuEl || !entry) return;
+    event.preventDefault();
+    event.stopPropagation();
+    closeContextMenu();
+
+    contextMenuState = {
+      entry,
+      iconUrl,
+      event: { clientX: event.clientX, clientY: event.clientY },
+    };
+
+    const useBtn = contextMenuEl.querySelector('[data-action="use"]');
+    const usable = isItemUsable(entry);
+    if (useBtn) {
+      useBtn.disabled = !usable;
+      useBtn.classList.toggle("inventory-v2-context-menu__item--disabled", !usable);
+    }
+
+    positionContextMenu(event.clientX, event.clientY);
+
+    contextMenuOutsideHandler = (outsideEvent) => {
+      if (outsideEvent.type === "keydown") {
+        if (outsideEvent.key === "Escape") closeContextMenu();
+        return;
+      }
+      if (contextMenuEl.contains(outsideEvent.target)) return;
+      closeContextMenu();
+    };
+    document.addEventListener("mousedown", contextMenuOutsideHandler);
+    document.addEventListener("keydown", contextMenuOutsideHandler);
+  }
+
+  function initContextMenu() {
+    if (!contextMenuEl || contextMenuEl.dataset.bound === "1") return;
+    contextMenuEl.dataset.bound = "1";
+    contextMenuEl.addEventListener("mousedown", (event) => {
+      event.stopPropagation();
+    });
+    contextMenuEl.querySelectorAll("[data-action]").forEach((btn) => {
+      btn.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        handleContextMenuAction(btn.dataset.action || "");
+      });
+    });
+  }
+
   function applyInventoryPayload(payload) {
     if (!payload?.inventory) return;
     inventoryData = payload.inventory;
@@ -204,10 +333,7 @@
 
   function isSellSlotDropActive() {
     if (!window.NosFeatureFlags?.useNewBazaarInventory?.()) return false;
-    const panel = document.querySelector('.bazaar__tab-panel[data-tab="list"]');
-    if (!panel?.classList.contains("bazaar__tab-panel--active")) return false;
-    const layer = document.getElementById("bazaar-layer");
-    return Boolean(layer && !layer.hidden);
+    return Boolean(window.NosBazaar?.isSellDropActive?.());
   }
 
   function removeDragGhost() {
@@ -234,7 +360,8 @@
   }
 
   function findSellSlotTarget(clientX, clientY) {
-    const sellSlotEl = document.getElementById("sell-slot");
+    const sellSlotEl =
+      document.getElementById("bazaar-v2-sell-slot") || document.getElementById("sell-slot");
     if (!sellSlotEl || !isSellSlotDropActive()) return null;
     const rect = sellSlotEl.getBoundingClientRect();
     if (
@@ -340,8 +467,8 @@
 
   function onItemDragMove(event) {
     if (!itemDragState || !dragGhostEl) return;
-    dragGhostEl.style.left = `${event.clientX + 8}px`;
-    dragGhostEl.style.top = `${event.clientY + 8}px`;
+    dragGhostEl.style.left = `${event.clientX - itemDragState.offsetX}px`;
+    dragGhostEl.style.top = `${event.clientY - itemDragState.offsetY}px`;
 
     clearDropHighlight();
     const dropTarget = findDropTarget(event.clientX, event.clientY);
@@ -375,6 +502,8 @@
       sourcePocket: pocketKey,
       sourceSlot: slotIndex,
       sourceEl: slotEl,
+      offsetX: 0,
+      offsetY: 0,
     };
 
     slotEl.classList.add("inventory-v2__slot--drag-source");
@@ -383,6 +512,8 @@
       dragGhostEl.className = "inventory-v2__item-drag-ghost";
       dragGhostEl.src = iconUrl;
       dragGhostEl.alt = "";
+      dragGhostEl.style.left = `${event.clientX}px`;
+      dragGhostEl.style.top = `${event.clientY}px`;
       document.body.appendChild(dragGhostEl);
     }
 
@@ -434,34 +565,12 @@
     }
 
     slot.addEventListener("mousedown", (e) => beginItemDrag(e, entry, pocketKey, slotIndex, slot));
-    slot.addEventListener("dblclick", () => {
-      const itemVNum = Number(entry.item?.itemVNum);
-      if (!MERCHANT_MEDAL_VNUMS.has(itemVNum)) return;
-      window.showMainInfoDialog?.("Use the item.", {
-        hideTitle: true,
-        onConfirm: async () => {
-          try {
-            const payload = await useMerchantMedal(entry.instanceId);
-            if (payload.activatedItemName) {
-              window.ChatUI?.appendAppMessage?.(
-                `The ${payload.activatedItemName} effect has been activated!`,
-              );
-            }
-          } catch {
-            // Ignore use failures for now.
-          }
-          window.hideMainInfoDialog?.();
-        },
-        onCancel: () => window.hideMainInfoDialog?.(),
-      });
+    slot.addEventListener("dblclick", (e) => {
+      e.preventDefault();
+      void tryUseItem(entry);
     });
     slot.addEventListener("contextmenu", (e) => {
-      e.preventDefault();
-      window.MainUI?.openItemInfo?.({
-        name: entry.item?.name,
-        icon: iconUrl,
-        item: entry.item,
-      });
+      openItemContextMenu(e, entry, iconUrl);
     });
 
     return slot;
@@ -600,6 +709,7 @@
   }
 
   function closeInventoryWindow() {
+    closeContextMenu();
     window.NosQuantityDialog?.close?.();
     if (layerEl) layerEl.hidden = true;
     cleanupItemDrag();
@@ -690,6 +800,7 @@
 
   renderTabs();
   initTitlebarDrag();
+  initContextMenu();
   window.NosWindowFocus?.watch?.(rootEl);
 
   window.NosInventoryV2 = {

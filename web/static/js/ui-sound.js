@@ -6,11 +6,18 @@ const CLICK_SOUND_DEBOUNCE_MS = 60;
 const GAME_BUTTON_SELECTOR = [
   ".bazaar__btn",
   ".bazaar__tab",
+  ".bazaar-v2__panel-tab",
+  ".bazaar-v2__sell-type-btn",
   ".bazaar__close",
   ".bazaar__pager-arrow",
   ".bazaar__page-num",
   ".bazaar__custom-select__trigger",
   ".bazaar__custom-select__option",
+  ".bazaar-v2__filter-select",
+  ".bazaar-v2__filter-btn",
+  ".bazaar-v2__search-btn",
+  ".bazaar-v2__filter-apply",
+  ".bazaar-v2__filter-reset",
   ".bazaar__purchase-step",
   ".bazaar__purchase-ok",
   ".skillbar__page",
@@ -42,6 +49,7 @@ const GAME_BUTTON_SELECTOR = [
   ".game-config__window-mode",
   ".game-config__mute",
   ".inventory__tab",
+  ".inventory-v2__tab",
 ].join(", ");
 
 let unlockProbe = null;
@@ -228,6 +236,17 @@ function handleGameButtonKeydown(event) {
   playClickSound();
 }
 
+function handleFilterSelectChange(event) {
+  const target = event.target;
+  if (!(target instanceof Element)) {
+    return;
+  }
+  if (!target.matches("select.bazaar-v2__filter-select")) {
+    return;
+  }
+  playClickSound();
+}
+
 document.addEventListener(
   "pointerdown",
   (event) => {
@@ -237,6 +256,7 @@ document.addEventListener(
   },
   { capture: true, passive: true },
 );
+document.addEventListener("change", handleFilterSelectChange, true);
 document.addEventListener("keydown", (event) => {
   unlockAudio();
   tryStartMainBgm();

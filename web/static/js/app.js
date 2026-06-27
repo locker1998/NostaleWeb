@@ -1219,17 +1219,20 @@ function openQuantityDialog({
   confirmOnOutsideClick = false,
   ariaLabel = "Select amount",
   useBodyOverlay = false,
+  inputMode = "quantity",
 }) {
   const mountTarget = useBodyOverlay ? document.body : container;
   if (!mountTarget) return;
 
   closeQuantityDialog();
 
+  const isPriceInput = inputMode === "price";
   const maxQ = Math.max(minQuantity, Number(maxQuantity) || minQuantity);
-  const initialQuantity =
+  const initialRaw =
     defaultQuantity == null
       ? minQuantity
       : Math.min(maxQ, Math.max(minQuantity, Number(defaultQuantity) || minQuantity));
+  const initialQuantity = isPriceInput ? parseSellPrice(String(initialRaw)) || minQuantity : initialRaw;
   let quantity = initialQuantity;
   const hasSummary = typeof getSummaryText === "function";
 
@@ -1258,7 +1261,11 @@ function openQuantityDialog({
   input.type = "text";
   input.className = "bazaar__purchase-input";
   input.inputMode = "numeric";
-  input.value = String(initialQuantity);
+  input.value = isPriceInput
+    ? initialQuantity > 0
+      ? formatGold(initialQuantity)
+      : ""
+    : String(initialQuantity);
 
   const stepper = document.createElement("div");
   stepper.className = "bazaar__purchase-stepper";
@@ -1289,9 +1296,17 @@ function openQuantityDialog({
   mountTarget.appendChild(el);
 
   function syncQuantity(nextValue) {
-    const parsed = Number.parseInt(String(nextValue), 10);
-    quantity = Number.isNaN(parsed) ? minQuantity : Math.min(maxQ, Math.max(minQuantity, parsed));
-    input.value = String(quantity);
+    if (isPriceInput) {
+      const parsed = parseSellPrice(nextValue);
+      quantity = Number.isNaN(parsed) || parsed < minQuantity
+        ? minQuantity
+        : Math.min(maxQ, Math.max(minQuantity, parsed));
+      input.value = quantity > 0 ? formatGold(quantity) : "";
+    } else {
+      const parsed = Number.parseInt(String(nextValue), 10);
+      quantity = Number.isNaN(parsed) ? minQuantity : Math.min(maxQ, Math.max(minQuantity, parsed));
+      input.value = String(quantity);
+    }
     if (hasSummary) {
       summary.textContent = getSummaryText(quantity);
       syncQuantityControlsWidth(summary, controls);
@@ -1322,10 +1337,44 @@ function openQuantityDialog({
     confirmQuantity();
   });
   input.addEventListener("input", () => syncQuantity(input.value));
+  input.addEventListener("paste", (event) => {
+    if (!isPriceInput) return;
+    event.preventDefault();
+    const digits = String(event.clipboardData?.getData("text") || "").replace(/[^\d]/g, "");
+    if (!digits) return;
+    const start = input.selectionStart ?? input.value.length;
+    const end = input.selectionEnd ?? input.value.length;
+    input.value = `${input.value.slice(0, start)}${digits}${input.value.slice(end)}`;
+    syncQuantity(input.value);
+  });
   input.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
       e.preventDefault();
       confirmQuantity();
+      return;
+    }
+    if (!isPriceInput) return;
+    if (e.key === "Tab") {
+      e.preventDefault();
+      if (quantity > 0) {
+        syncQuantity(Math.min(maxQ, quantity * 1000));
+      }
+      return;
+    }
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    const allowed = [
+      "Backspace",
+      "Delete",
+      "ArrowLeft",
+      "ArrowRight",
+      "ArrowUp",
+      "ArrowDown",
+      "Home",
+      "End",
+    ];
+    if (allowed.includes(e.key)) return;
+    if (e.key.length === 1 && !/^\d$/.test(e.key)) {
+      e.preventDefault();
     }
   });
   el.addEventListener("mousedown", (e) => e.stopPropagation());
@@ -1354,6 +1403,7 @@ function openChangePriceDialog(item, event) {
     clientY: event.clientY,
     title: "Change",
     ariaLabel: "Change listing price",
+    inputMode: "price",
     getSummaryText: () => "Change the prices of the items you are offering.",
     maxQuantity: maxSellUnitPrice(),
     minQuantity: 1,
@@ -1720,6 +1770,13 @@ function onInventoryDropForSell(drag, event) {
   if (!drag?.entry) return;
   resetSellFormInputs();
   openSellQuantityDialog(drag.entry, event);
+}
+
+function isSellDropActive() {
+  const layer = document.getElementById("bazaar-layer");
+  if (!layer || layer.hidden) return false;
+  const panel = document.querySelector('.bazaar__tab-panel[data-tab="list"]');
+  return Boolean(panel?.classList.contains("bazaar__tab-panel--active"));
 }
 
 function refreshListingsFromServer(listings) {
@@ -2213,16 +2270,17 @@ function closeBazaarWindow() {
   closeAllCustomSelects();
 }
 
-window.NosBazaar = {
+window.NosBazaarClassic = {
   open: openBazaarWindow,
   close: closeBazaarWindow,
   reposition: positionBazaarWindow,
   setMerchantMedal,
   setGold,
   onInventoryDropForSell,
+  isSellDropActive,
 };
 
-window.NosReplaceableWindows?.register("bazaar", {
+window.NosReplaceableWindows?.register("bazaar-classic", {
   group: "bazaar",
   close: closeBazaarWindow,
 });

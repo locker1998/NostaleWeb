@@ -184,10 +184,7 @@
     if (!window.NosFeatureFlags?.useNewBazaarInventory?.()) {
       return false;
     }
-    const panel = document.querySelector('.bazaar__tab-panel[data-tab="list"]');
-    if (!panel?.classList.contains("bazaar__tab-panel--active")) return false;
-    const layer = document.getElementById("bazaar-layer");
-    return Boolean(layer && !layer.hidden);
+    return Boolean(window.NosBazaar?.isSellDropActive?.());
   }
 
   function removeDragGhost() {
@@ -217,7 +214,8 @@
   }
 
   function findSellSlotTarget(clientX, clientY) {
-    const sellSlotEl = document.getElementById("sell-slot");
+    const sellSlotEl =
+      document.getElementById("bazaar-v2-sell-slot") || document.getElementById("sell-slot");
     if (!sellSlotEl || !isSellSlotDropActive()) {
       return null;
     }
@@ -285,8 +283,8 @@
     if (!itemDragState) return;
 
     if (dragGhostEl) {
-      dragGhostEl.style.left = `${event.clientX - 16}px`;
-      dragGhostEl.style.top = `${event.clientY - 16}px`;
+      dragGhostEl.style.left = `${event.clientX - (itemDragState.offsetX || 0)}px`;
+      dragGhostEl.style.top = `${event.clientY - (itemDragState.offsetY || 0)}px`;
     }
 
     clearDropHighlight();
@@ -467,6 +465,8 @@
       entry,
       sourceEl: slotEl,
       splitDrag: event.ctrlKey,
+      offsetX: 0,
+      offsetY: 0,
     };
     slotEl.classList.add("inventory__slot--drag-source");
 
@@ -475,8 +475,8 @@
       dragGhostEl.className = "inventory__item-drag-ghost";
       dragGhostEl.src = iconUrl;
       dragGhostEl.alt = "";
-      dragGhostEl.style.left = `${event.clientX - 16}px`;
-      dragGhostEl.style.top = `${event.clientY - 16}px`;
+      dragGhostEl.style.left = `${event.clientX}px`;
+      dragGhostEl.style.top = `${event.clientY}px`;
       document.body.appendChild(dragGhostEl);
     }
 
